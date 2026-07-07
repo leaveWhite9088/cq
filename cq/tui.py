@@ -84,6 +84,52 @@ class AddTaskScreen(ModalScreen[dict[str, Any] | None]):
         self.dismiss(None)
 
 
+class EditTaskScreen(ModalScreen[dict[str, Any] | None]):
+    """Modal screen for editing an existing task."""
+
+    BINDINGS = [
+        ("escape", "dismiss_none", "Cancel"),
+    ]
+
+    def __init__(self, task: dict[str, Any]) -> None:
+        super().__init__()
+        self.task_data = task
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="dialog"):
+            yield Label(f"Edit task {self.task_data['id']}", classes="dialog-title")
+            yield Label("Description:")
+            self.description = Input(
+                value=self.task_data["description"],
+                placeholder="What should Claude do?",
+            )
+            yield self.description
+            self.new_policy = RadioSet(
+                RadioButton("continue conversation", value=self.task_data["context_policy"] == "continue"),
+                RadioButton("start new conversation", value=self.task_data["context_policy"] == "new"),
+            )
+            yield self.new_policy
+            with Horizontal(classes="dialog-buttons"):
+                yield Button("Save", variant="primary", id="save")
+                yield Button("Cancel", id="cancel")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "save":
+            context_policy = "new" if self.new_policy.pressed_index == 1 else "continue"
+            self.dismiss(
+                {
+                    "id": self.task_data["id"],
+                    "description": self.description.value,
+                    "context_policy": context_policy,
+                }
+            )
+        else:
+            self.dismiss(None)
+
+    def action_dismiss_none(self) -> None:
+        self.dismiss(None)
+
+
 class HelpScreen(ModalScreen[None]):
     """Modal screen showing keyboard shortcuts."""
 
@@ -101,6 +147,7 @@ class HelpScreen(ModalScreen[None]):
 
 任务队列
   [b]a[/b]          添加任务
+  [b]e[/b]          编辑选中任务
   [b]r[/b]          运行队列（后台 worker）
   [b]R[/b]          重置卡住/失败任务
   [b]C[/b]          清理旧 completed 任务
@@ -253,6 +300,7 @@ class CqTuiApp(App[None]):
         ("q,ctrl+c", "quit", "Quit"),
         ("?", "help", "Help"),
         ("a", "add_task", "Add task"),
+        ("e", "edit_task", "Edit task"),
         ("r", "run_queue", "Run queue"),
         ("R", "reset_queue", "Reset queue"),
         ("C", "cleanup_queue", "Cleanup"),
@@ -335,6 +383,46 @@ class CqTuiApp(App[None]):
 
         self.push_screen(AddTaskScreen(), callback=on_result)
 
+    async def action_edit_task(self) -> None:
+        table = self.query_one("#task-table", TaskTable)
+        if table.cursor_row is None:
+            self._log("No task selected.")
+            return
+
+        row_key = table.get_row_at(table.cursor_row)[0]
+        try:
+            task = store.get_task(int(row_key), path=self.db_path)
+        except Exception as exc:
+            self._log(f"Error: {exc}")
+            return
+
+        if task is None:
+            self._log(f"Task {row_key} not found.")
+            return
+
+        if task["status"] == "in_progress":
+            self._log(f"Task {row_key} is in progress; cannot edit while running.")
+            return
+
+        def on_result(result: dict[str, Any] | None) -> None:
+            if result is None:
+                return
+            try:
+                updates: dict[str, Any] = {
+                    "description": result["description"],
+                    "context_policy": result["context_policy"],
+                }
+                updated = store.update_task(result["id"], path=self.db_path, **updates)
+                self._log(
+                    f"Updated task {updated['id']} ({updated['context_policy']}): "
+                    f"{updated['description']}"
+                )
+                self._load_tasks()
+            except Exception as exc:
+                self._log(f"Error updating task: {exc}")
+
+        self.push_screen(EditTaskScreen(task), callback=on_result)
+
     def action_run_queue(self) -> None:
         self._log("Starting queue runner...")
 
@@ -370,7 +458,7 @@ class CqTuiApp(App[None]):
             except Exception as exc:
                 self.call_from_thread(self._log, f"Run error: {exc}")
 
-        self.run_worker(runner)
+        self.run_worker(runner, thread=True)
 
     def action_reset_queue(self) -> None:
         try:

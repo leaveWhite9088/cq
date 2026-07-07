@@ -193,3 +193,53 @@ def test_migration_drops_session_column(tmp_path: Path) -> None:
     assert len(migrated) == 1
     assert "session" not in migrated[0]
     assert migrated[0]["description"] == "legacy task"
+
+
+def test_update_task_description_and_policy(db: Path) -> None:
+    task = store.add_task("old desc", context_policy="continue", path=db)
+
+    updated = store.update_task(
+        task["id"], description="new desc", context_policy="new", path=db
+    )
+    assert updated["description"] == "new desc"
+    assert updated["context_policy"] == "new"
+    assert updated["status"] == "pending"
+
+
+def test_update_task_resets_completed_task(db: Path) -> None:
+    task = store.add_task("do thing", path=db)
+    store.claim_next(path=db)
+    store.complete_task(task["id"], status="completed", result="output", path=db)
+
+    updated = store.update_task(
+        task["id"], description="do thing better", path=db
+    )
+    assert updated["description"] == "do thing better"
+    assert updated["status"] == "pending"
+    assert updated["result"] is None
+    assert updated["completed_at"] is None
+
+
+def test_update_task_refuses_in_progress(db: Path) -> None:
+    task = store.add_task("running", path=db)
+    store.claim_next(path=db)
+
+    with pytest.raises(ValueError, match="in progress"):
+        store.update_task(task["id"], description="changed", path=db)
+
+
+def test_update_task_no_changes(db: Path) -> None:
+    task = store.add_task("noop", path=db)
+    with pytest.raises(ValueError, match="Nothing to update"):
+        store.update_task(task["id"], path=db)
+
+
+def test_update_task_invalid_policy(db: Path) -> None:
+    task = store.add_task("x", path=db)
+    with pytest.raises(ValueError, match="Invalid context_policy"):
+        store.update_task(task["id"], context_policy="invalid", path=db)
+
+
+def test_update_task_missing_id(db: Path) -> None:
+    with pytest.raises(ValueError, match="not found"):
+        store.update_task(999, description="x", path=db)

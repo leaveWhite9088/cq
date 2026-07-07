@@ -60,6 +60,50 @@ def test_delete_task_command(db: Path, capsys) -> None:
     assert store.get_task(task["id"], path=db) is None
 
 
+def test_edit_task_description(db: Path, capsys) -> None:
+    task = store.add_task("old", path=db)
+
+    code = cli.main(["--db", str(db), "edit", str(task["id"]), "--description", "new"])
+    assert code == 0
+
+    captured = capsys.readouterr()
+    assert "Updated task" in captured.out
+
+    updated = store.get_task(task["id"], path=db)
+    assert updated["description"] == "new"
+
+
+def test_edit_task_policy(db: Path, capsys) -> None:
+    task = store.add_task("x", path=db)
+
+    code = cli.main(["--db", str(db), "edit", str(task["id"]), "--new"])
+    assert code == 0
+
+    updated = store.get_task(task["id"], path=db)
+    assert updated["context_policy"] == "new"
+
+
+def test_edit_task_no_changes(db: Path, capsys) -> None:
+    task = store.add_task("x", path=db)
+
+    code = cli.main(["--db", str(db), "edit", str(task["id"])])
+    assert code == 1
+
+    captured = capsys.readouterr()
+    assert "nothing to update" in captured.err
+
+
+def test_edit_task_in_progress(db: Path, capsys) -> None:
+    task = store.add_task("x", path=db)
+    store.claim_next(path=db)
+
+    code = cli.main(["--db", str(db), "edit", str(task["id"]), "--description", "y"])
+    assert code == 1
+
+    captured = capsys.readouterr()
+    assert "in progress" in captured.err
+
+
 def test_delete_all_tasks_command(db: Path, capsys, monkeypatch) -> None:
     store.add_task("A", path=db)
     store.add_task("B", path=db)

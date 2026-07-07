@@ -132,6 +132,7 @@ cq tui
 | 键位 | 作用 |
 |------|------|
 | `a` | 添加任务 |
+| `e` | 编辑选中任务 |
 | `r` | 运行队列 |
 | `R` | 重置卡住/失败任务 |
 | `C` | 清理已完成任务 |
@@ -153,6 +154,8 @@ cq tui
 | `cq init` | 创建队列数据库。 |
 | `cq add "..."` | 添加任务（默认继续上一次对话）。 |
 | `cq add "..." --new` | 添加任务，并让 Claude 开启新对话。 |
+| `cq edit ID --description "..."` | 修改任务描述。 |
+| `cq edit ID --new` / `--continue` | 修改任务的上下文策略。 |
 | `cq list` | 显示所有任务。 |
 | `cq list --status pending` | 只显示 pending 任务。 |
 | `cq next` | 手动领取下一个 pending 任务。 |

@@ -54,6 +54,31 @@ def cmd_add(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_edit(args: argparse.Namespace) -> int:
+    path = _db_path(args)
+    updates: dict[str, Any] = {}
+    if args.description is not None:
+        updates["description"] = args.description
+    if args.new:
+        updates["context_policy"] = "new"
+    elif args.continue_:
+        updates["context_policy"] = "continue"
+
+    if not updates:
+        print("Error: nothing to update. Use --description, --new, or --continue.", file=sys.stderr)
+        return 1
+
+    try:
+        task = store.update_task(args.id, path=path, **updates)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    policy_note = "new conversation" if task["context_policy"] == "new" else "continue"
+    print(f"Updated task {task['id']} ({policy_note}): {task['description']}")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     path = _db_path(args)
     tasks = store.list_tasks(status=args.status, limit=args.limit, path=path)
@@ -256,6 +281,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Start a fresh Claude conversation for this task",
     )
 
+    p_edit = sub.add_parser("edit", help="Edit an existing task")
+    p_edit.add_argument("id", type=int, help="Task ID")
+    p_edit.add_argument(
+        "--description", "-d",
+        help="New task description",
+    )
+    edit_policy = p_edit.add_mutually_exclusive_group()
+    edit_policy.add_argument(
+        "--new",
+        action="store_true",
+        help="Set context policy to start a new conversation",
+    )
+    edit_policy.add_argument(
+        "--continue",
+        dest="continue_",
+        action="store_true",
+        help="Set context policy to continue the previous conversation",
+    )
+
     p_list = sub.add_parser("list", help="List tasks")
     p_list.add_argument(
         "--status",
@@ -335,6 +379,7 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "init": cmd_init,
         "add": cmd_add,
+        "edit": cmd_edit,
         "list": cmd_list,
         "next": cmd_next,
         "complete": cmd_complete,

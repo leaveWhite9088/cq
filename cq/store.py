@@ -331,6 +331,70 @@ def list_tasks(
         conn.close()
 
 
+def update_task(
+    task_id: int,
+    description: str | None = None,
+    context_policy: str | None = None,
+    path: Path | str | None = None,
+) -> dict[str, Any]:
+    """Update a task's description and/or context policy.
+
+    If the task was completed or failed, it is reset to pending and its
+    previous output is cleared so the updated task can be run again.
+    In-progress tasks cannot be edited while they are running.
+    """
+    task = get_task(task_id, path=path)
+    if task is None:
+        raise ValueError(f"Task {task_id} not found")
+
+    if task["status"] == "in_progress":
+        raise ValueError(f"Task {task_id} is in progress; wait for it to finish")
+
+    if description is None and context_policy is None:
+        raise ValueError("Nothing to update")
+
+    if context_policy is not None and context_policy not in VALID_POLICIES:
+        raise ValueError(f"Invalid context_policy: {context_policy}")
+
+    updates: list[str] = []
+    params: list[Any] = []
+
+    if description is not None:
+        updates.append("description = ?")
+        params.append(description)
+    if context_policy is not None:
+        updates.append("context_policy = ?")
+        params.append(context_policy)
+
+    # Reset completed/failed tasks so edits take effect on next run.
+    if task["status"] in ("completed", "failed"):
+        updates.extend(
+            [
+                "status = 'pending'",
+                "started_at = NULL",
+                "completed_at = NULL",
+                "result = NULL",
+                "error = NULL",
+            ]
+        )
+
+    params.append(task_id)
+
+    conn = _connect(path)
+    try:
+        conn.execute(
+            f"UPDATE tasks SET {', '.join(updates)} WHERE id = ?;",
+            params,
+        )
+        conn.commit()
+        updated = get_task(task_id, path=path)
+        if updated is None:
+            raise ValueError(f"Task {task_id} not found after update")
+        return updated
+    finally:
+        conn.close()
+
+
 def delete_task(
     task_id: int,
     path: Path | str | None = None,

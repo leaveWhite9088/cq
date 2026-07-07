@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from cq import store
-from cq.tui import CqTuiApp, TaskDetailScreen
+from cq.tui import CqTuiApp, EditTaskScreen, TaskDetailScreen
 
 
 @pytest.fixture
@@ -53,3 +53,14 @@ async def test_tui_opens_task_detail(db: Path) -> None:
         app.push_screen(TaskDetailScreen(task))
         await pilot.pause()
         assert app.screen.__class__.__name__ == "TaskDetailScreen"
+
+
+@pytest.mark.asyncio
+async def test_tui_opens_edit_screen(db: Path) -> None:
+    app = CqTuiApp(db_path=db)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        task = store.list_tasks(path=db)[0]
+        app.push_screen(EditTaskScreen(task))
+        await pilot.pause()
+        assert app.screen.__class__.__name__ == "EditTaskScreen"
