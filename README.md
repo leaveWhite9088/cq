@@ -1,52 +1,52 @@
 # cq
 
-> A lightweight task queue / buffer for [Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/overview).
+> Claude Code 的轻量级任务队列 / 缓冲区。
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`cq` lets you dump tasks into a queue and have Claude Code consume them one by one. It solves the classic problem:
+`cq` 让你把任务扔进队列，然后由 Claude Code 一个一个消化它们。它解决的是这个经典问题：
 
-> "I just thought of task B, but Claude is still working on task A."
+> “我刚想到任务 B，但 Claude 还在做任务 A。”
 
-Instead of interrupting the current session, queue the new task and let `cq` feed it to Claude automatically.
-
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Usage](#usage)
-- [Command Reference](#command-reference)
-- [How It Works](#how-it-works)
-- [Configuration](#configuration)
-- [Development](#development)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License](#license)
+不用打断当前会话，把新任务塞进队列，`cq` 会自动喂给 Claude Code。
 
 ---
 
-## Features
+## 目录
 
-- **Simple CLI**: Add, list, and manage tasks from the terminal.
-- **SQLite-backed queue**: Durable, local-first storage with no external services.
-- **One reliable execution mode**: `cq run` processes tasks sequentially via `claude -c -p`.
-- **Context preservation**: `context_policy == "continue"` continues the previous Claude conversation; `"new"` starts fresh.
-- **Automatic cleanup**: Completed tasks are purged after a configurable retention period (default 24 hours).
-- **Easy to extend**: Clean Python package structure; tests included.
+- [功能特性](#功能特性)
+- [安装](#安装)
+- [快速开始](#快速开始)
+- [使用 TUI](#使用-tui)
+- [会话管理](#会话管理)
+- [命令速查](#命令速查)
+- [工作原理](#工作原理)
+- [配置](#配置)
+- [开发与测试](#开发与测试)
+- [贡献与许可](#贡献与许可)
 
 ---
 
-## Installation
+## 功能特性
 
-Clone the repository and install in editable mode:
+- **简洁 CLI**：从终端添加、查看、管理任务。
+- **TUI 界面**：全屏交互，可视化切换会话、查看队列、运行任务。
+- **会话（Session）管理**：把任务分组到不同会话，每个会话有独立队列，也可以一键运行全部会话。
+- **SQLite 持久化**：本地数据库存储，无需外部服务。
+- **上下文策略**：`continue` 继续上一次对话上下文；`new` 开启新上下文。
+- **自动清理**：已完成任务默认保留 24 小时，超时后自动删除。
+- **易扩展**：清晰的 Python 包结构，带测试用例。
+
+---
+
+## 安装
+
+Clone 仓库并以 editable 模式安装：
 
 ```bash
-git clone https://github.com/yourusername/cq.git
-cd cq
+git clone https://github.com/leaveWhite9088/fifo-tui.git
+cd fifo-tui
 python -m venv .venv
 
 # Windows
@@ -58,7 +58,7 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-For development, install the optional dev dependencies:
+开发版依赖（包含测试工具）：
 
 ```bash
 pip install -e ".[dev]"
@@ -66,142 +66,199 @@ pip install -e ".[dev]"
 
 ---
 
-## Quick Start
+## 快速开始
 
-For a concrete step-by-step walkthrough, see [USAGE.md](USAGE.md).
+详细步骤示例见 [USAGE.md](USAGE.md)。
 
-1. **Initialize the queue:**
+1. **初始化队列**：
 
    ```bash
    cq init
    ```
 
-2. **Add tasks anytime:**
+2. **添加任务**：
 
    ```bash
-   cq add "fix login redirect"
-   cq add "optimize database query"
+   cq add "修复登录页跳转"
+   cq add "优化数据库查询"
    ```
 
-3. **Run the queue:**
+3. **运行队列**：
 
    ```bash
    cq run
    ```
 
-   `cq` will invoke Claude Code for each task, one at a time, until the queue is empty.
+   `cq` 会依次调用 Claude Code 处理每个任务，直到队列为空。
 
 ---
 
-## Usage
+## 使用 TUI
+
+启动全屏界面：
 
 ```bash
-# Initialize a new queue in .cq/
-cq init
+cq tui
+```
 
-# Add tasks
-cq add "refactor auth module"
-cq add "update README"
+界面布局：
 
-# Inspect the queue
-cq list
+- 左侧：会话列表
+- 右侧：当前会话的任务队列
+- 底部：状态栏与快捷键提示
 
-# Run all pending tasks
-cq run
+常用快捷键：
 
-# Run a single task
-cq run --once
+| 键位 | 作用 |
+|------|------|
+| `a` | 添加任务 |
+| `r` | 运行当前会话队列 |
+| `R` | 重置当前会话的卡住/失败任务 |
+| `C` | 清理当前会话已完成任务 |
+| `n` | 手动领取下一个任务 |
+| `x` | 标记选中任务为 completed |
+| `d` | 删除选中任务 |
+| `+` / `-` | 切换上一个 / 下一个会话 |
+| `Tab` | 切换焦点 |
+| `?` | 帮助 |
+| `q` / `Ctrl+C` | 退出 |
 
-# Keep completed tasks for only 1 hour
-cq run --retention-hours 1
+---
+
+## 会话管理
+
+会话就是任务的分组。默认会话叫 `default`。
+
+**按会话添加任务**：
+
+```bash
+cq add "修复登录页跳转" --session auth
+cq add "更新 README" --session docs
+```
+
+**查看某个会话的队列**：
+
+```bash
+cq list --session auth
+```
+
+**运行某个会话**：
+
+```bash
+cq run --session auth
+```
+
+**运行所有会话**：
+
+```bash
+cq run --all-sessions
+```
+
+**管理会话**：
+
+```bash
+# 列出所有会话
+cq sessions
+
+# 重命名
+cq rename-session old-name new-name
+
+# 删除某个会话下的所有任务
+cq delete-session old-name
 ```
 
 ---
 
-## Command Reference
+## 命令速查
 
-| Command | Description |
-|---------|-------------|
-| `cq init` | Create the queue database. |
-| `cq add "..."` | Append a new task to the queue. |
-| `cq add "..." --context-policy new` | Append a task that starts with a fresh Claude context. |
-| `cq list` | Display all tasks and their statuses. |
-| `cq next` | Manually claim the next pending task. |
-| `cq complete ID` | Mark a task as completed. |
-| `cq reset` | Reset `in_progress` / `failed` tasks to `pending`. |
-| `cq run` | Process the queue via `claude -c -p`. |
-| `cq run --once` | Process a single task. |
-| `cq run --retention-hours 12` | Override how long completed tasks are kept. |
-| `cq cleanup` | Purge completed tasks older than the retention period. |
-| `cq cleanup --retention-hours 0` | Disable retention and keep all completed tasks. |
+| 命令 | 说明 |
+|------|------|
+| `cq init` | 创建队列数据库。 |
+| `cq add "..."` | 添加任务到默认会话。 |
+| `cq add "..." --session X` | 添加任务到会话 X。 |
+| `cq add "..." --context-policy new` | 任务使用新上下文。 |
+| `cq list` | 显示所有会话的任务（不指定 `--session` 时）。 |
+| `cq list --session X` | 显示会话 X 的任务。 |
+| `cq next` | 手动领取下一个 pending 任务（跨会话）。 |
+| `cq next --session X` | 领取会话 X 的下一个任务。 |
+| `cq complete ID` | 标记任务为 completed。 |
+| `cq reset` | 重置 in_progress 任务回 pending（跨会话）。 |
+| `cq reset --session X` | 重置会话 X 的 in_progress 任务。 |
+| `cq reset --failed` | 同时重置 failed 任务。 |
+| `cq run` | 运行所有 pending 任务（跨会话，保持旧行为）。 |
+| `cq run --session X` | 只运行会话 X 的队列。 |
+| `cq run --all-sessions` | 按会话逐个运行所有队列。 |
+| `cq run --once` | 只运行一个任务。 |
+| `cq cleanup` | 清理已完成的老任务（跨会话）。 |
+| `cq cleanup --session X` | 只清理会话 X 的已完成任务。 |
+| `cq rename-session OLD NEW` | 重命名会话。 |
+| `cq delete-session SESSION` | 删除某会话下的所有任务。 |
+| `cq tui` | 启动交互式 TUI。 |
 
 ---
 
-## How It Works
+## 工作原理
 
-`cq run` processes pending tasks sequentially. For each task it invokes Claude Code with a prompt like:
+`cq run` 会顺序处理 pending 任务。对于每个任务，它会调用 Claude Code 的 headless 模式：
 
 ```text
 You are working through a task queue. Current task (N): <description>. Complete ...
 ```
 
-- Tasks with `context_policy == "continue"` are invoked as `claude -c -p`, so Claude preserves the previous task's conversation context.
-- Tasks with `context_policy == "new"` are invoked as `claude -p`, starting fresh.
+- `context_policy == "continue"` 时使用 `claude -c -p`，保留上一个任务的对话上下文。
+- `context_policy == "new"` 时使用 `claude -p`，开启新上下文。
 
-Each task still runs in its own process, so a failure in one task does not poison the rest. After each task, `cq` automatically deletes completed tasks older than the retention period.
+每个任务仍然在独立进程中运行，因此一个任务失败不会影响其他任务。每个任务结束后，`cq` 会自动删除超过保留期的 completed 任务。
 
 ---
 
-## Configuration
+## 配置
 
-| File / Variable | Purpose |
-|-----------------|---------|
-| `.cq/queue.db` | Default SQLite queue database. |
-| `CQ_DB_PATH` | Environment variable to override the database path. |
-| `--db PATH` | Per-command flag to override the database path. |
-| `CQ_COMPLETED_RETENTION_HOURS` | Hours to keep completed tasks before auto-deletion (default: 24). Set to `0` to disable. |
-| `--retention-hours HOURS` | Per-command override for completed-task retention. |
-| `.claude/CLAUDE.md` | Instructions loaded by Claude Code when invoked by `cq run`. |
+| 文件 / 环境变量 | 作用 |
+|-----------------|------|
+| `.cq/queue.db` | 默认 SQLite 队列数据库。 |
+| `CQ_DB_PATH` | 环境变量，覆盖数据库路径。 |
+| `--db PATH` | 每条命令的数据库路径覆盖。 |
+| `CQ_COMPLETED_RETENTION_HOURS` | 已完成任务保留小时数（默认 24，设为 0 则禁用自动清理）。 |
+| `--retention-hours HOURS` | 每条命令的保留时间覆盖。 |
+| `.claude/CLAUDE.md` | Claude Code 被 `cq run` 调用时加载的项目指示。 |
 
-Example:
+示例：
 
 ```bash
 export CQ_DB_PATH=/path/to/my-queue.db
 export CQ_COMPLETED_RETENTION_HOURS=12
 cq init
-cq add "deploy staging build"
+cq add "部署 staging 构建"
 cq run
 ```
 
 ---
 
-## Development
+## 开发与测试
 
-The project is organized as a standard Python package:
+项目结构：
 
 ```text
 .
-├── cq/              # Main package
-│   ├── cli.py       # CLI entry point
-│   ├── store.py     # SQLite queue backend
-│   └── wrapper.py   # Claude wrapper
-├── tests/           # Test suite
-├── pyproject.toml   # Project metadata and dependencies
-├── README.md        # This file
-└── USAGE.md         # Step-by-step usage example
+├── cq/              # 主包
+│   ├── cli.py       # CLI 入口
+│   ├── store.py     # SQLite 后端
+│   ├── wrapper.py   # Claude 调用封装
+│   └── tui.py       # Textual TUI
+├── tests/           # 测试集
+├── pyproject.toml   # 项目元数据与依赖
+├── README.md        # 本文件
+└── USAGE.md         # 详细使用示例
 ```
 
----
-
-## Testing
-
-Run the test suite with [pytest](https://pytest.org/):
+运行测试：
 
 ```bash
 pytest
 ```
 
-To run tests with more detail:
+查看详细输出：
 
 ```bash
 pytest -v
@@ -209,17 +266,17 @@ pytest -v
 
 ---
 
-## Contributing
+## 贡献与许可
 
-Contributions are welcome!
+欢迎贡献！
 
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feature/my-feature`.
-3. Make your changes and add tests where appropriate.
-4. Ensure the test suite passes: `pytest`.
-5. Submit a pull request with a clear description of your changes.
+1. Fork 本仓库。
+2. 创建 feature 分支：`git checkout -b feature/my-feature`。
+3. 提交更改，并在适当位置添加测试。
+4. 确保测试通过：`pytest`。
+5. 提交 Pull Request，并在描述中说明修改内容。
 
-Please open an issue first for major changes or new features so we can discuss the design.
+重大变更或新功能建议先开 issue 讨论设计。
 
 ---
 

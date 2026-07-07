@@ -115,11 +115,64 @@ def _resolve_retention_hours(retention_hours: int | None) -> int:
         return 24
 
 
-def _run_cleanup(retention_hours: int, path: Path | str | None = None) -> None:
+def _run_cleanup(
+    retention_hours: int,
+    session: str | None = None,
+    path: Path | str | None = None,
+) -> None:
     """Purge old completed tasks and print a message if any were deleted."""
-    deleted = store.cleanup_completed_tasks(retention_hours, path=path)
+    deleted = store.cleanup_completed_tasks(retention_hours, session=session, path=path)
     if deleted:
         print(f"Cleaned up {deleted} old completed task(s).")
+
+
+def run_loop_session(
+    session: str | None = None,
+    once: bool = False,
+    path: Path | str | None = None,
+    retention_hours: int | None = None,
+) -> None:
+    """Process queued tasks for a specific session until empty (or one task)."""
+    retention_hours = _resolve_retention_hours(retention_hours)
+
+    while True:
+        task = store.claim_next(session=session, path=path)
+        if task is None:
+            _run_cleanup(retention_hours, session=session, path=path)
+            print("Queue is empty. Nothing to do.")
+            break
+
+        print(f"Running task {task['id']} [{task['session']}]: {task['description']}")
+        completed = run_task(task["id"], path=path)
+        print(f"Task {completed['id']} finished with status={completed['status']}")
+
+        _run_cleanup(retention_hours, session=session, path=path)
+
+        if once:
+            break
+
+
+def run_all_sessions(
+    once: bool = False,
+    path: Path | str | None = None,
+    retention_hours: int | None = None,
+) -> None:
+    """Process queued tasks across all sessions."""
+    retention_hours = _resolve_retention_hours(retention_hours)
+    sessions = store.list_sessions(path=path)
+
+    for session in sessions:
+        if once:
+            task = store.claim_next(session=session, path=path)
+            if task is None:
+                continue
+            print(f"Running task {task['id']} [{task['session']}]: {task['description']}")
+            completed = run_task(task["id"], path=path)
+            print(f"Task {completed['id']} finished with status={completed['status']}")
+            _run_cleanup(retention_hours, session=session, path=path)
+            break
+        else:
+            run_loop_session(session=session, once=False, path=path, retention_hours=retention_hours)
 
 
 def run_loop(
@@ -127,21 +180,13 @@ def run_loop(
     path: Path | str | None = None,
     retention_hours: int | None = None,
 ) -> None:
-    """Process queued tasks until empty (or one task if once=True)."""
-    retention_hours = _resolve_retention_hours(retention_hours)
+    """Process queued tasks until empty (or one task if once=True).
 
-    while True:
-        task = store.claim_next(path=path)
-        if task is None:
-            _run_cleanup(retention_hours, path=path)
-            print("Queue is empty. Nothing to do.")
-            break
+    This is the legacy/global entry point; it processes tasks regardless of
+    session. New code should prefer ``run_loop_session`` or ``run_all_sessions``.
+    """
+    run_loop_session(session=None, once=once, path=path, retention_hours=retention_hours)
 
-        print(f"Running task {task['id']}: {task['description']}")
-        completed = run_task(task["id"], path=path)
-        print(f"Task {completed['id']} finished with status={completed['status']}")
 
-        _run_cleanup(retention_hours, path=path)
-
-        if once:
-            break
+if __name__ == "__main__":
+    run_loop()
