@@ -265,6 +265,47 @@ cq cleanup
 
 ---
 
+## 场景九：把 cq 放进另一个项目里使用
+
+假设你正在开发 `my-project`，想直接用 `cq` 管理 Claude 任务：
+
+### 1. 把 `fifo-tui` 放到项目根目录
+
+可以直接复制目录，也可以用 git submodule：
+
+```text
+my-project/
+├── fifo-tui/
+│   ├── install.py
+│   ├── cq/
+│   └── ...
+├── src/
+└── ...
+```
+
+### 2. 在当前环境里一键安装
+
+进入 `my-project` 的 Conda / venv / 系统 Python，执行：
+
+```bash
+python fifo-tui/install.py
+```
+
+`install.py` 会调用 `pip install -e ./fifo-tui`，把 `cq` 装到当前环境里，**不会新建虚拟环境**。
+
+### 3. 在 `my-project` 里使用
+
+```bash
+cd my-project
+cq init
+cq add "重构 utils.py"
+cq tui
+```
+
+队列数据库默认创建在执行命令的目录下（即 `my-project/.cq/queue.db`），和 `fifo-tui` 目录本身互不干扰。
+
+---
+
 ## 常见问题
 
 ### Q: `cq run` 前台运行怎么退出？

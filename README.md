@@ -41,26 +41,55 @@
 
 ## 安装
 
-Clone 仓库并以 editable 模式安装：
+`cq` 只需要当前 Python 环境里能执行 `pip install`，**不需要额外创建虚拟环境**。如果你已经在 Conda、venv 或系统 Python 里工作，直接装进去即可。
+
+### 方式一：使用 install.py（推荐）
 
 ```bash
 git clone https://github.com/leaveWhite9088/fifo-tui.git
+# 或者把它放进另一个项目的根目录下
 cd fifo-tui
-python -m venv .venv
 
-# Windows
-.venv\Scripts\activate
-
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -e .
+python install.py
+# 开发依赖（测试工具）
+python install.py --dev
 ```
 
-开发版依赖（包含测试工具）：
+`install.py` 会自动用当前 Python 解释器执行 `pip install -e .`，不会新建 venv。
+
+### 方式二：直接用 pip
 
 ```bash
+cd fifo-tui
+pip install -e .
+# 开发依赖
 pip install -e ".[dev]"
+```
+
+### 嵌入到另一个项目里
+
+把 `fifo-tui` 整个目录复制（或 git submodule）到另一个项目的根目录：
+
+```text
+your-project/
+├── fifo-tui/
+│   ├── install.py
+│   ├── cq/
+│   └── ...
+└── ...
+```
+
+然后进入 `your-project` 的 Python 环境，执行一键安装：
+
+```bash
+python fifo-tui/install.py
+```
+
+安装完成后，在该环境里任意位置都能使用：
+
+```bash
+cq init
+cq tui
 ```
 
 ---
