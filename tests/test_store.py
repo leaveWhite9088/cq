@@ -208,6 +208,16 @@ def test_rename_session(db: Path) -> None:
     assert store.list_sessions(path=db) == ["new"]
 
 
+def test_delete_all_sessions(db: Path) -> None:
+    store.add_task("A", session="s1", path=db)
+    store.add_task("B", session="s2", path=db)
+    store.add_task("C", session="default", path=db)
+
+    deleted = store.delete_all_sessions(path=db)
+    assert deleted == 3
+    assert store.list_sessions(path=db) == []
+
+
 def test_delete_session(db: Path) -> None:
     store.add_task("A", session="temp", path=db)
     store.add_task("B", session="temp", path=db)

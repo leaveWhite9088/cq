@@ -426,3 +426,17 @@ def delete_task(
         return cursor.rowcount > 0
     finally:
         conn.close()
+
+
+def delete_all_sessions(path: Path | str | None = None) -> int:
+    """Delete all tasks across every session.
+
+    Returns the number of deleted tasks.
+    """
+    conn = _connect(path)
+    try:
+        cursor = conn.execute("DELETE FROM tasks;")
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        conn.close()

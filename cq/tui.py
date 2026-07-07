@@ -135,6 +135,7 @@ class HelpScreen(ModalScreen[None]):
   [b]n[/b]          手动领取下一个任务
   [b]x[/b]          标记选中任务为 completed
   [b]d[/b]          删除选中任务
+  [b]D[/b]          删除所有会话的所有任务
 """
 
     def compose(self) -> ComposeResult:
@@ -241,6 +242,7 @@ class CqTuiApp(App[None]):
         ("n", "next_task", "Next task"),
         ("x", "complete_task", "Complete task"),
         ("d", "delete_task", "Delete task"),
+        ("D", "delete_all_sessions", "Delete all"),
         ("+", "next_session", "Next session"),
         ("-", "prev_session", "Prev session"),
     ]
@@ -413,6 +415,25 @@ class CqTuiApp(App[None]):
             ConfirmScreen(
                 f"Delete all completed tasks in session '{self.current_session}'?"
             ),
+            callback=on_confirm,
+        )
+
+    def action_delete_all_sessions(self) -> None:
+        def on_confirm(confirmed: bool) -> None:
+            if not confirmed:
+                return
+            try:
+                deleted = store.delete_all_sessions(path=self.db_path)
+                self._set_status(f"Deleted all sessions ({deleted} task(s))")
+                self.current_session = store.DEFAULT_SESSION
+                self._load_tasks()
+                self._load_sessions()
+                self._select_session(store.DEFAULT_SESSION)
+            except Exception as exc:
+                self._set_status(f"Error: {exc}")
+
+        self.push_screen(
+            ConfirmScreen("Delete all tasks in all sessions?"),
             callback=on_confirm,
         )
 

@@ -31,8 +31,8 @@ cq init
 ### 3. 添加任务
 
 ```bash
-cq add "修复登录页跳转错误"
-cq add "更新 README 里的安装说明"
+cq add "写一个关于小黑猫勇士升级打怪的故事，写第一章，写到1.txt"
+cq add "接着写一个关于小黑猫勇士升级打怪的故事，写第二章，写到2.txt"
 ```
 
 不指定 `--session` 时，任务会进入 `default` 会话。
@@ -54,6 +54,8 @@ ID     Session          Status       Created              Description
 
 ### 5. 运行队列
 
+`cq run` 现在默认在后台运行，不会锁住你的控制台。运行后你可以继续 `cq add` 添加新任务。
+
 只跑一个：
 
 ```bash
@@ -66,15 +68,19 @@ cq run --once
 cq run
 ```
 
-输出示例：
+输出示例（仅提示已启动后台 runner）：
 
 ```text
-Running task 1 [default]: 修复登录页跳转错误
-Task 1 finished with status=completed
-Running task 2 [default]: 更新 README 里的安装说明
-Task 2 finished with status=completed
-Queue is empty. Nothing to do.
+Started background runner. Logs: D:\Project2\code-260706-auto-vibecoding\fifo-tui\.cq\run.log
 ```
+
+如果你想看实时输出（前台运行）：
+
+```bash
+cq run --foreground
+```
+
+日志文件位置：`.cq/run.log`。
 
 ### 6. 查看结果
 
@@ -98,10 +104,10 @@ cq list
 ### 添加任务到不同会话
 
 ```bash
-cq add "修复登录页跳转" --session auth
-cq add "增加密码强度校验" --session auth
-cq add "更新 README 安装说明" --session docs
-cq add "补充 API 文档" --session docs
+cq add "写一个关于小黑猫勇士升级打怪的故事，写第一章，写到2.1.txt" --session story1
+cq add "继续写一个关于小黑猫勇士升级打怪的故事，写第二章，写到2.2.txt" --session story1
+cq add "写一个关于小白狗勇士升级打怪的故事，写第一章，写到3.1.txt" --session story2
+cq add "继续写一个关于小白狗勇士升级打怪的故事，写第二章，写到3.2.txt" --session story2
 ```
 
 ### 查看所有会话
@@ -250,6 +256,14 @@ cq delete-session temp-experiment
 
 会删除该会话下的所有任务，请谨慎使用。
 
+### 删除所有会话
+
+```bash
+cq delete-session --all
+```
+
+会删除所有任务，需要输入 `y` 确认。
+
 ### 清理旧 completed 任务
 
 ```bash
@@ -317,10 +331,24 @@ cq cleanup
 cq list --session auth
 ```
 
+### Q: `cq run` 卡住控制台怎么办？
+
+现在默认就是后台运行。如果你发现前台运行，可能是用了 `--foreground`。直接运行：
+
+```bash
+cq run
+```
+
+即可立即返回，后台继续处理队列。查看进度用 `cq list` 或看 `.cq/run.log`。
+
 ### Q: `cq run` 和 `cq run --all-sessions` 有什么区别？
 
 - `cq run`：全局 FIFO，领取最早的 pending 任务，不管它在哪个会话。
 - `cq run --all-sessions`：按会话逐个处理，每个会话内部按 FIFO。
+
+### Q: 每个会话有独立的 Claude 上下文吗？
+
+目前没有。`continue` 只是调用 Claude 时加了 `-c`，让它继续当前目录下的上一次对话。会话只负责把任务分组排队。如果你不想让不同会话串上下文，可以给任务加 `--context-policy new`。
 
 ### Q: 删除任务和完成任务有什么区别？
 

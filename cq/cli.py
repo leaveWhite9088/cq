@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -124,8 +125,55 @@ def cmd_reset(args: argparse.Namespace) -> int:
     return 0
 
 
+def _spawn_background_runner(args: argparse.Namespace) -> None:
+    """Spawn `cq run --foreground` in a detached background process.
+
+    Output is appended to ``.cq/run.log`` next to the database.
+    """
+    db_path = _db_path(args)
+    log_path = Path(store.default_db_path()).parent / "run.log"
+    if db_path:
+        log_path = Path(db_path).parent / "run.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    cmd = [sys.executable, "-m", "cq.cli"]
+    if db_path:
+        cmd.extend(["--db", str(db_path)])
+    cmd.append("run")
+    cmd.append("--foreground")
+
+    if args.once:
+        cmd.append("--once")
+    if args.all_sessions:
+        cmd.append("--all-sessions")
+    if args.session:
+        cmd.extend(["--session", args.session])
+    if args.retention_hours is not None:
+        cmd.extend(["--retention-hours", str(args.retention_hours)])
+
+    popen_kwargs: dict[str, Any] = {
+        "stdout": open(log_path, "a", encoding="utf-8"),
+        "stderr": subprocess.STDOUT,
+        "stdin": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    subprocess.Popen(cmd, **popen_kwargs)
+    print(f"Started background runner. Logs: {log_path}")
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     path = _db_path(args)
+
+    if not args.foreground:
+        _spawn_background_runner(args)
+        return 0
+
     try:
         if args.all_sessions:
             wrapper.run_all_sessions(
@@ -193,9 +241,30 @@ def cmd_rename_session(args: argparse.Namespace) -> int:
 
 def cmd_delete_session(args: argparse.Namespace) -> int:
     path = _db_path(args)
+    if args.all:
+        if not _confirm("Delete all tasks in all sessions?"):
+            print("Cancelled.")
+            return 0
+        deleted = store.delete_all_sessions(path=path)
+        print(f"Deleted all sessions ({deleted} task(s))")
+        return 0
+
+    if not args.session:
+        print("Error: session name is required (or use --all)", file=sys.stderr)
+        return 1
+
     deleted = store.delete_session(args.session, path=path)
     print(f"Deleted session '{args.session}' ({deleted} task(s))")
     return 0
+
+
+def _confirm(message: str) -> bool:
+    """Ask the user for confirmation in interactive mode."""
+    try:
+        answer = input(f"{message} [y/N]: ")
+    except (EOFError, KeyboardInterrupt):
+        return False
+    return answer.strip().lower() in {"y", "yes"}
 
 
 def _add_session_arg(
@@ -284,6 +353,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Run tasks across all sessions instead of a single session",
     )
     p_run.add_argument(
+        "--foreground",
+        action="store_true",
+        help="Run in the foreground (do not detach a background process)",
+    )
+    p_run.add_argument(
         "--retention-hours",
         type=int,
         default=None,
@@ -308,8 +382,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_rename.add_argument("old", help="Current session name")
     p_rename.add_argument("new", help="New session name")
 
-    p_delete_session = sub.add_parser("delete-session", help="Delete all tasks in a session")
-    p_delete_session.add_argument("session", help="Session name to delete")
+    p_delete_session = sub.add_parser("delete-session", help="Delete all tasks in a session or all sessions")
+    p_delete_session.add_argument("session", nargs="?", help="Session name to delete")
+    p_delete_session.add_argument(
+        "--all",
+        action="store_true",
+        help="Delete all tasks across all sessions",
+    )
 
     return parser
 

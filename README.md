@@ -185,7 +185,8 @@ cq delete-session old-name
 | `cq reset` | 重置 in_progress 任务回 pending（跨会话）。 |
 | `cq reset --session X` | 重置会话 X 的 in_progress 任务。 |
 | `cq reset --failed` | 同时重置 failed 任务。 |
-| `cq run` | 运行所有 pending 任务（跨会话，保持旧行为）。 |
+| `cq run` | 后台运行所有 pending 任务，不阻塞控制台。 |
+| `cq run --foreground` | 前台运行，实时输出到控制台。 |
 | `cq run --session X` | 只运行会话 X 的队列。 |
 | `cq run --all-sessions` | 按会话逐个运行所有队列。 |
 | `cq run --once` | 只运行一个任务。 |
@@ -193,20 +194,25 @@ cq delete-session old-name
 | `cq cleanup --session X` | 只清理会话 X 的已完成任务。 |
 | `cq rename-session OLD NEW` | 重命名会话。 |
 | `cq delete-session SESSION` | 删除某会话下的所有任务。 |
+| `cq delete-session --all` | 删除所有会话的所有任务。 |
 | `cq tui` | 启动交互式 TUI。 |
 
 ---
 
 ## 工作原理
 
-`cq run` 会顺序处理 pending 任务。对于每个任务，它会调用 Claude Code 的 headless 模式：
+`cq run` 默认会启动一个**后台**进程来顺序处理 pending 任务，主进程立即返回，因此你可以继续往队列里添加新任务。日志写入 `.cq/run.log`。需要前台实时输出时用 `cq run --foreground`。
+
+对于每个任务，`cq` 会调用 Claude Code 的 headless 模式：
 
 ```text
 You are working through a task queue. Current task (N): <description>. Complete ...
 ```
 
-- `context_policy == "continue"` 时使用 `claude -c -p`，保留上一个任务的对话上下文。
+- `context_policy == "continue"` 时使用 `claude -c -p`，让 Claude 继续**上一个任务的对话上下文**。
 - `context_policy == "new"` 时使用 `claude -p`，开启新上下文。
+
+**关于会话与上下文**：会话只负责把任务分组排队；`continue` 使用的是 Claude Code CLI 自身的 `-c`（继续上次对话）机制，它基于当前工作目录的会话历史。因此目前**会话之间并不能做到完全独立的上下文隔离**，同目录下 `continue` 会复用全局最后一次对话。如果你需要会话级隔离，请在相关任务上显式使用 `--context-policy new`。
 
 每个任务仍然在独立进程中运行，因此一个任务失败不会影响其他任务。每个任务结束后，`cq` 会自动删除超过保留期的 completed 任务。
 
