@@ -5,15 +5,15 @@ from pathlib import Path
 import pytest
 
 from cq import store
-from cq.tui import CqTuiApp
+from cq.tui import CqTuiApp, TaskDetailScreen
 
 
 @pytest.fixture
 def db(tmp_path: Path) -> Path:
     db_path = tmp_path / "queue.db"
     store.init_db(db_path)
-    store.add_task("Task A", session="s1", path=db_path)
-    store.add_task("Task B", session="s2", path=db_path)
+    store.add_task("Task A", path=db_path)
+    store.add_task("Task B", context_policy="new", path=db_path)
     return db_path
 
 
@@ -26,20 +26,13 @@ async def test_tui_mounts(db: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_tui_shows_sessions_and_tasks(db: Path) -> None:
+async def test_tui_shows_tasks(db: Path) -> None:
     app = CqTuiApp(db_path=db)
     async with app.run_test() as pilot:
         await pilot.pause()
 
-        session_list = app.query_one("#session-list")
-        assert any(item.name == "s1" for item in session_list.children)
-        assert any(item.name == "s2" for item in session_list.children)
-
-        app.current_session = "s1"
-        await pilot.pause()
-
         table = app.query_one("#task-table")
-        assert table.row_count >= 1
+        assert table.row_count >= 2
 
 
 @pytest.mark.asyncio
@@ -48,14 +41,15 @@ async def test_tui_opens_help(db: Path) -> None:
     async with app.run_test() as pilot:
         await pilot.press("?")
         await pilot.pause()
-        assert any(isinstance(screen, app.screen.__class__) for screen in app._screen_stack)
+        assert len(app.screen_stack) >= 2
 
 
 @pytest.mark.asyncio
-async def test_tui_switch_session(db: Path) -> None:
+async def test_tui_opens_task_detail(db: Path) -> None:
     app = CqTuiApp(db_path=db)
     async with app.run_test() as pilot:
         await pilot.pause()
-        app.current_session = "s2"
+        task = store.list_tasks(path=db)[0]
+        app.push_screen(TaskDetailScreen(task))
         await pilot.pause()
-        assert app.current_session == "s2"
+        assert app.screen.__class__.__name__ == "TaskDetailScreen"

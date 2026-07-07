@@ -1,10 +1,10 @@
 # cq 使用指南
 
-本文通过几个具体场景，演示如何使用 `cq` 管理 Claude Code 任务队列，包括 CLI、TUI 和会话（Session）管理。
+本文通过具体场景，演示如何使用 `cq` 管理 Claude Code 任务队列，包括 CLI、TUI、后台运行和查看任务输出。
 
 ---
 
-## 场景一：最基础用法（无会话）
+## 场景一：最基础用法
 
 你正在维护一个项目，发现有两个问题要修：
 
@@ -31,11 +31,9 @@ cq init
 ### 3. 添加任务
 
 ```bash
-cq add "写一个关于小黑猫勇士升级打怪的故事，写第一章，写到1.txt"
-cq add "接着写一个关于小黑猫勇士升级打怪的故事，写第二章，写到2.txt"
+cq add "修复登录页跳转错误"
+cq add "更新 README 里的安装说明"
 ```
-
-不指定 `--session` 时，任务会进入 `default` 会话。
 
 ### 4. 查看队列
 
@@ -46,43 +44,45 @@ cq list
 输出：
 
 ```text
-ID     Session          Status       Created              Description
---------------------------------------------------------------------------------------
-2      default          pending      2026-07-07T13:00:00  更新 README 里的安装说明
-1      default          pending      2026-07-07T13:00:00  修复登录页跳转错误
+ID     Status       Policy     Created              Description
+--------------------------------------------------------------------------------
+2      pending      continue   2026-07-07T13:00:00  更新 README 里的安装说明
+1      pending      continue   2026-07-07T13:00:00  修复登录页跳转错误
 ```
 
-### 5. 运行队列
-
-`cq run` 现在默认在后台运行，不会锁住你的控制台。运行后你可以继续 `cq add` 添加新任务。
-
-只跑一个：
-
-```bash
-cq run --once
-```
-
-连续跑完：
+### 5. 后台运行队列
 
 ```bash
 cq run
 ```
 
-输出示例（仅提示已启动后台 runner）：
+`cq run` 现在默认在后台运行，不会锁住控制台。你会看到：
 
 ```text
 Started background runner. Logs: D:\Project2\code-260706-auto-vibecoding\fifo-tui\.cq\run.log
 ```
 
-如果你想看实时输出（前台运行）：
+然后你可以继续添加更多任务：
 
 ```bash
-cq run --foreground
+cq add "优化数据库查询"
 ```
 
-日志文件位置：`.cq/run.log`。
+后台 runner 会按顺序把它们都跑完。
 
-### 6. 查看结果
+### 6. 查看运行日志
+
+```bash
+type .cq\run.log
+```
+
+或者在 PowerShell：
+
+```bash
+Get-Content .cq\run.log -Wait
+```
+
+### 7. 查看结果
 
 ```bash
 cq list
@@ -92,76 +92,15 @@ cq list
 
 ---
 
-## 场景二：用会话把任务分组
+## 场景二：某个任务要开启新对话
 
-你同时要处理两个独立方向：
-
-- **auth 会话**：登录、权限相关
-- **docs 会话**：文档、README 相关
-
-你想分开管理，避免混在一起。
-
-### 添加任务到不同会话
+默认情况下，所有任务都会继续上一次对话。如果你某个任务想和之前完全没关系，用 `--new`：
 
 ```bash
-cq add "写一个关于小黑猫勇士升级打怪的故事，写第一章，写到2.1.txt" --session story1
-cq add "继续写一个关于小黑猫勇士升级打怪的故事，写第二章，写到2.2.txt" --session story1
-cq add "写一个关于小白狗勇士升级打怪的故事，写第一章，写到3.1.txt" --session story2
-cq add "继续写一个关于小白狗勇士升级打怪的故事，写第二章，写到3.2.txt" --session story2
+cq add "做一个和当前项目无关的实验" --new
 ```
 
-### 查看所有会话
-
-```bash
-cq sessions
-```
-
-输出：
-
-```text
-auth
-default
-docs
-```
-
-### 只看某个会话
-
-```bash
-cq list --session auth
-```
-
-输出：
-
-```text
-ID     Session          Status       Created              Description
---------------------------------------------------------------------------------------
-2      auth             pending      2026-07-07T13:00:00  增加密码强度校验
-1      auth             pending      2026-07-07T13:00:00  修复登录页跳转
-```
-
-### 运行某个会话
-
-```bash
-cq run --session auth
-```
-
-只会执行 `auth` 会话里的任务。
-
-### 运行所有会话
-
-```bash
-cq run --all-sessions
-```
-
-会按会话名顺序依次处理每个会话里的 pending 任务。
-
-### 只跑一个任务（任意会话）
-
-```bash
-cq run --once
-```
-
-不指定 `--session` 时，会领取全局最早的 pending 任务。
+这个任务运行时不会带 `-c`，Claude 会开启全新上下文。
 
 ---
 
@@ -177,7 +116,7 @@ cq list
 
 发现某个任务状态是 `in_progress` 或 `failed`。
 
-### 重置当前会话
+### 重置
 
 ```bash
 cq reset
@@ -185,16 +124,10 @@ cq reset
 
 默认会把 `in_progress` 任务重置为 `pending`。
 
-### 重置指定会话
-
-```bash
-cq reset --session auth
-```
-
 ### 同时重置 failed 任务
 
 ```bash
-cq reset --session auth --failed
+cq reset --failed
 ```
 
 ---
@@ -209,69 +142,55 @@ cq tui
 
 界面布局：
 
-- 左侧：会话列表
-- 右侧：当前选中会话的任务队列
-- 底部：状态栏
+- 上半部分：任务队列表格
+- 下半部分：Output / Log 面板
 
 ### 常用操作
 
 | 操作 | 按键 |
 |------|------|
 | 添加任务 | `a` |
-| 运行当前会话 | `r` |
-| 重置当前会话 | `R` |
-| 清理当前会话已完成任务 | `C` |
+| 运行队列 | `r` |
+| 重置队列 | `R` |
+| 清理已完成任务 | `C` |
 | 领取下一个任务 | `n` |
+| 查看选中任务输出 | `Enter` |
 | 标记选中任务完成 | `x` |
 | 删除选中任务 | `d` |
-| 切换上一个 / 下一个会话 | `-` / `+` |
+| 删除所有任务 | `D` |
 | 显示帮助 | `?` |
 | 退出 | `q` / `Ctrl+C` |
 
 ### 典型流程
 
 1. 启动 `cq tui`。
-2. 按 `a` 输入任务描述，选择目标会话，添加任务。
-3. 用 `+` / `-` 在不同会话间切换，查看各自队列。
-4. 选中会话后按 `r` 运行该会话。
-5. 运行结束后任务状态会自动刷新。
+2. 按 `a` 输入任务描述，选择是否开启新对话。
+3. 按 `r` 运行队列，下方 Log 面板会显示运行进度。
+4. 选中一个 completed 任务，按 `Enter` 查看完整输出。
 
 ---
 
-## 场景五：会话整理
+## 场景五：清理和删除
 
-### 重命名会话
-
-```bash
-cq rename-session auth authentication
-```
-
-该会话下所有任务的 `session` 字段都会被修改。
-
-### 删除会话
+### 删除单个任务
 
 ```bash
-cq delete-session temp-experiment
+cq delete 5
 ```
 
-会删除该会话下的所有任务，请谨慎使用。
-
-### 删除所有会话
+### 删除所有任务
 
 ```bash
-cq delete-session --all
+cq delete --all
 ```
 
-会删除所有任务，需要输入 `y` 确认。
+需要输入 `y` 确认。
 
 ### 清理旧 completed 任务
 
 ```bash
-# 清理所有会话里超过 24 小时的 completed 任务
+# 清理超过 24 小时的 completed 任务
 cq cleanup
-
-# 只清理 docs 会话
-cq cleanup --session docs
 
 # 清理所有 completed 任务（不管多久）
 cq cleanup --retention-hours 0
@@ -303,19 +222,19 @@ cq --db D:\my-queue.db list
 
 ```bash
 # 1. 随时想到任务就加
-cq add "重构 auth 模块" --session auth
-cq add "补充部署文档" --session docs
+cq add "重构 auth 模块"
+cq add "补充部署文档"
 
-# 2. 通过 TUI 直观查看和管理
+# 2. 启动后台 runner，不阻塞终端
+cq run
+
+# 3. 继续加任务，runner 会自动处理
+cq add "修复边界情况"
+
+# 4. 通过 TUI 直观查看进度和输出
 cq tui
 
-# 3. 批量处理某个方向
-cq run --session auth
-
-# 4. 处理剩余所有方向
-cq run --all-sessions
-
-# 5. 清理已完成任务
+# 5. 清理旧 completed 任务
 cq cleanup
 ```
 
@@ -323,38 +242,30 @@ cq cleanup
 
 ## 常见问题
 
-### Q: `cq list` 为什么不显示某个会话的任务？
+### Q: `cq run` 前台运行怎么退出？
 
-不指定 `--session` 时，`cq list` 会显示所有会话的任务。如果只想看一个会话，用：
+`cq run --foreground` 是前台阻塞运行。按 `Ctrl+C` 可以中断，但会留下一个 `in_progress` 任务，之后用 `cq reset` 重置即可。
 
-```bash
-cq list --session auth
+### Q: 后台 runner 怎么停止？
+
+在 Windows 上：
+
+```powershell
+Get-Process python | Stop-Process
 ```
 
-### Q: `cq run` 卡住控制台怎么办？
+或者更精确地找到对应的 `cq run --foreground` 进程。
 
-现在默认就是后台运行。如果你发现前台运行，可能是用了 `--foreground`。直接运行：
+### Q: `--new` 和默认 `continue` 有什么区别？
 
-```bash
-cq run
-```
+- `continue`：调用 `claude -c -p`，继续上一次对话。
+- `--new`：调用 `claude -p`，开启新对话。
 
-即可立即返回，后台继续处理队列。查看进度用 `cq list` 或看 `.cq/run.log`。
+### Q: 为什么调用带 `--dangerously-skip-permissions`？
 
-### Q: `cq run` 和 `cq run --all-sessions` 有什么区别？
+这样 Claude 在运行任务时不会停下来问你要权限，否则后台 runner 会卡住等你确认。
 
-- `cq run`：全局 FIFO，领取最早的 pending 任务，不管它在哪个会话。
-- `cq run --all-sessions`：按会话逐个处理，每个会话内部按 FIFO。
+### Q: 任务输出存在哪里？
 
-### Q: 每个会话有独立的 Claude 上下文吗？
-
-目前没有。`continue` 只是调用 Claude 时加了 `-c`，让它继续当前目录下的上一次对话。会话只负责把任务分组排队。如果你不想让不同会话串上下文，可以给任务加 `--context-policy new`。
-
-### Q: 删除任务和完成任务有什么区别？
-
-- **完成**（`cq complete` 或 TUI 里 `x`）：任务保留在数据库，状态变为 `completed`，可被清理。
-- **删除**（TUI 里 `d`）：任务从数据库直接移除。
-
-### Q: TUI 里能运行所有会话吗？
-
-当前 TUI 的 `r` 只运行当前选中会话。要运行所有会话，可以回到 CLI 执行 `cq run --all-sessions`。
+- 后台运行时的实时日志：`.cq/run.log`
+- 每个任务的完整输出：存在 SQLite 的 `result` 字段，可以在 TUI 里按 `Enter` 查看

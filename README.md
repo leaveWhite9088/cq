@@ -19,7 +19,6 @@
 - [安装](#安装)
 - [快速开始](#快速开始)
 - [使用 TUI](#使用-tui)
-- [会话管理](#会话管理)
 - [命令速查](#命令速查)
 - [工作原理](#工作原理)
 - [配置](#配置)
@@ -31,10 +30,10 @@
 ## 功能特性
 
 - **简洁 CLI**：从终端添加、查看、管理任务。
-- **TUI 界面**：全屏交互，可视化切换会话、查看队列、运行任务。
-- **会话（Session）管理**：把任务分组到不同会话，每个会话有独立队列，也可以一键运行全部会话。
+- **TUI 界面**：全屏交互，查看队列、任务输出、运行状态。
+- **后台运行**：`cq run` 默认在后台运行，不阻塞控制台。
 - **SQLite 持久化**：本地数据库存储，无需外部服务。
-- **上下文策略**：`continue` 继续上一次对话上下文；`new` 开启新上下文。
+- **上下文策略**：默认继续上一次对话；可指定某个任务开启新对话。
 - **自动清理**：已完成任务默认保留 24 小时，超时后自动删除。
 - **易扩展**：清晰的 Python 包结构，带测试用例。
 
@@ -83,13 +82,35 @@ pip install -e ".[dev]"
    cq add "优化数据库查询"
    ```
 
-3. **运行队列**：
+3. **后台运行队列**（不阻塞控制台）：
 
    ```bash
    cq run
    ```
 
-   `cq` 会依次调用 Claude Code 处理每个任务，直到队列为空。
+   输出示例：
+
+   ```text
+   Started background runner. Logs: D:\Project2\code-260706-auto-vibecoding\fifo-tui\.cq\run.log
+   ```
+
+4. **继续添加任务**：
+
+   ```bash
+   cq add "更新 README"
+   ```
+
+5. **查看队列和结果**：
+
+   ```bash
+   cq list
+   ```
+
+6. **前台运行**（需要实时输出时）：
+
+   ```bash
+   cq run --foreground
+   ```
 
 ---
 
@@ -103,69 +124,25 @@ cq tui
 
 界面布局：
 
-- 左侧：会话列表
-- 右侧：当前会话的任务队列
-- 底部：状态栏与快捷键提示
+- 上半部分：任务队列表格
+- 下半部分：Output / Log 面板，显示运行日志和选中任务的输出
 
-常用快捷键：
+### 常用操作
 
 | 键位 | 作用 |
 |------|------|
 | `a` | 添加任务 |
-| `r` | 运行当前会话队列 |
-| `R` | 重置当前会话的卡住/失败任务 |
-| `C` | 清理当前会话已完成任务 |
+| `r` | 运行队列 |
+| `R` | 重置卡住/失败任务 |
+| `C` | 清理已完成任务 |
 | `n` | 手动领取下一个任务 |
+| `Enter` | 查看选中任务的完整输出 |
 | `x` | 标记选中任务为 completed |
 | `d` | 删除选中任务 |
-| `+` / `-` | 切换上一个 / 下一个会话 |
+| `D` | 删除所有任务 |
 | `Tab` | 切换焦点 |
 | `?` | 帮助 |
 | `q` / `Ctrl+C` | 退出 |
-
----
-
-## 会话管理
-
-会话就是任务的分组。默认会话叫 `default`。
-
-**按会话添加任务**：
-
-```bash
-cq add "修复登录页跳转" --session auth
-cq add "更新 README" --session docs
-```
-
-**查看某个会话的队列**：
-
-```bash
-cq list --session auth
-```
-
-**运行某个会话**：
-
-```bash
-cq run --session auth
-```
-
-**运行所有会话**：
-
-```bash
-cq run --all-sessions
-```
-
-**管理会话**：
-
-```bash
-# 列出所有会话
-cq sessions
-
-# 重命名
-cq rename-session old-name new-name
-
-# 删除某个会话下的所有任务
-cq delete-session old-name
-```
 
 ---
 
@@ -174,27 +151,21 @@ cq delete-session old-name
 | 命令 | 说明 |
 |------|------|
 | `cq init` | 创建队列数据库。 |
-| `cq add "..."` | 添加任务到默认会话。 |
-| `cq add "..." --session X` | 添加任务到会话 X。 |
-| `cq add "..." --context-policy new` | 任务使用新上下文。 |
-| `cq list` | 显示所有会话的任务（不指定 `--session` 时）。 |
-| `cq list --session X` | 显示会话 X 的任务。 |
-| `cq next` | 手动领取下一个 pending 任务（跨会话）。 |
-| `cq next --session X` | 领取会话 X 的下一个任务。 |
+| `cq add "..."` | 添加任务（默认继续上一次对话）。 |
+| `cq add "..." --new` | 添加任务，并让 Claude 开启新对话。 |
+| `cq list` | 显示所有任务。 |
+| `cq list --status pending` | 只显示 pending 任务。 |
+| `cq next` | 手动领取下一个 pending 任务。 |
 | `cq complete ID` | 标记任务为 completed。 |
-| `cq reset` | 重置 in_progress 任务回 pending（跨会话）。 |
-| `cq reset --session X` | 重置会话 X 的 in_progress 任务。 |
+| `cq reset` | 重置 in_progress 任务回 pending。 |
 | `cq reset --failed` | 同时重置 failed 任务。 |
-| `cq run` | 后台运行所有 pending 任务，不阻塞控制台。 |
-| `cq run --foreground` | 前台运行，实时输出到控制台。 |
-| `cq run --session X` | 只运行会话 X 的队列。 |
-| `cq run --all-sessions` | 按会话逐个运行所有队列。 |
+| `cq run` | 后台运行队列。 |
+| `cq run --foreground` | 前台运行，实时输出。 |
 | `cq run --once` | 只运行一个任务。 |
-| `cq cleanup` | 清理已完成的老任务（跨会话）。 |
-| `cq cleanup --session X` | 只清理会话 X 的已完成任务。 |
-| `cq rename-session OLD NEW` | 重命名会话。 |
-| `cq delete-session SESSION` | 删除某会话下的所有任务。 |
-| `cq delete-session --all` | 删除所有会话的所有任务。 |
+| `cq cleanup` | 清理已完成的老任务。 |
+| `cq cleanup --retention-hours 0` | 清理所有 completed 任务。 |
+| `cq delete ID` | 删除指定任务。 |
+| `cq delete --all` | 删除所有任务。 |
 | `cq tui` | 启动交互式 TUI。 |
 
 ---
@@ -209,10 +180,9 @@ cq delete-session old-name
 You are working through a task queue. Current task (N): <description>. Complete ...
 ```
 
-- `context_policy == "continue"` 时使用 `claude -c -p`，让 Claude 继续**上一个任务的对话上下文**。
-- `context_policy == "new"` 时使用 `claude -p`，开启新上下文。
-
-**关于会话与上下文**：会话只负责把任务分组排队；`continue` 使用的是 Claude Code CLI 自身的 `-c`（继续上次对话）机制，它基于当前工作目录的会话历史。因此目前**会话之间并不能做到完全独立的上下文隔离**，同目录下 `continue` 会复用全局最后一次对话。如果你需要会话级隔离，请在相关任务上显式使用 `--context-policy new`。
+- 默认任务使用 `claude -c -p`，让 Claude 继续上一次对话。
+- 使用 `--new` 的任务使用 `claude -p`，开启新对话。
+- 所有调用都附带 `--dangerously-skip-permissions`，避免运行过程中弹出权限确认。
 
 每个任务仍然在独立进程中运行，因此一个任务失败不会影响其他任务。每个任务结束后，`cq` 会自动删除超过保留期的 completed 任务。
 
@@ -223,6 +193,7 @@ You are working through a task queue. Current task (N): <description>. Complete 
 | 文件 / 环境变量 | 作用 |
 |-----------------|------|
 | `.cq/queue.db` | 默认 SQLite 队列数据库。 |
+| `.cq/run.log` | `cq run` 后台运行时的日志。 |
 | `CQ_DB_PATH` | 环境变量，覆盖数据库路径。 |
 | `--db PATH` | 每条命令的数据库路径覆盖。 |
 | `CQ_COMPLETED_RETENTION_HOURS` | 已完成任务保留小时数（默认 24，设为 0 则禁用自动清理）。 |

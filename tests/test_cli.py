@@ -14,125 +14,93 @@ def db(tmp_path: Path) -> Path:
     return db_path
 
 
-def test_add_with_session(db: Path, capsys) -> None:
-    code = cli.main(["--db", str(db), "add", "hello", "--session", "feature-x"])
+def test_add_with_new_policy(db: Path, capsys) -> None:
+    code = cli.main(["--db", str(db), "add", "hello", "--new"])
     assert code == 0
 
     captured = capsys.readouterr()
-    assert "feature-x" in captured.out
+    assert "new conversation" in captured.out
 
-    tasks = store.list_tasks(session="feature-x", path=db)
+    tasks = store.list_tasks(path=db)
     assert len(tasks) == 1
-    assert tasks[0]["description"] == "hello"
+    assert tasks[0]["context_policy"] == "new"
 
 
-def test_list_with_session(db: Path, capsys) -> None:
-    store.add_task("A", session="s1", path=db)
-    store.add_task("B", session="s2", path=db)
+def test_add_default_policy(db: Path, capsys) -> None:
+    code = cli.main(["--db", str(db), "add", "hello"])
+    assert code == 0
 
-    code = cli.main(["--db", str(db), "list", "--session", "s1"])
+    captured = capsys.readouterr()
+    assert "continue" in captured.out
+
+    tasks = store.list_tasks(path=db)
+    assert tasks[0]["context_policy"] == "continue"
+
+
+def test_list(db: Path, capsys) -> None:
+    store.add_task("A", path=db)
+    store.add_task("B", path=db)
+
+    code = cli.main(["--db", str(db), "list"])
     assert code == 0
 
     captured = capsys.readouterr()
     assert "A" in captured.out
-    assert "B" not in captured.out
+    assert "B" in captured.out
 
 
-def test_sessions_command(db: Path, capsys) -> None:
-    store.add_task("A", session="alpha", path=db)
-    store.add_task("B", session="beta", path=db)
+def test_delete_task_command(db: Path, capsys) -> None:
+    task = store.add_task("A", path=db)
 
-    code = cli.main(["--db", str(db), "sessions"])
+    code = cli.main(["--db", str(db), "delete", str(task["id"])])
     assert code == 0
 
     captured = capsys.readouterr()
-    assert "alpha" in captured.out
-    assert "beta" in captured.out
+    assert str(task["id"]) in captured.out
+    assert store.get_task(task["id"], path=db) is None
 
 
-def test_rename_session_command(db: Path, capsys) -> None:
-    store.add_task("A", session="old", path=db)
-
-    code = cli.main(["--db", str(db), "rename-session", "old", "new"])
-    assert code == 0
-
-    captured = capsys.readouterr()
-    assert "new" in captured.out
-    assert store.list_sessions(path=db) == ["new"]
-
-
-def test_delete_session_command(db: Path, capsys, monkeypatch) -> None:
-    store.add_task("A", session="temp", path=db)
+def test_delete_all_tasks_command(db: Path, capsys, monkeypatch) -> None:
+    store.add_task("A", path=db)
+    store.add_task("B", path=db)
 
     monkeypatch.setattr(cli, "_confirm", lambda msg: True)
-    code = cli.main(["--db", str(db), "delete-session", "temp"])
+    code = cli.main(["--db", str(db), "delete", "--all"])
     assert code == 0
 
     captured = capsys.readouterr()
-    assert "temp" in captured.out
-    assert store.list_sessions(path=db) == []
+    assert "all tasks" in captured.out
+    assert store.list_tasks(path=db) == []
 
 
-def test_delete_all_sessions_command(db: Path, capsys, monkeypatch) -> None:
-    store.add_task("A", session="s1", path=db)
-    store.add_task("B", session="s2", path=db)
-
-    monkeypatch.setattr(cli, "_confirm", lambda msg: True)
-    code = cli.main(["--db", str(db), "delete-session", "--all"])
-    assert code == 0
-
-    captured = capsys.readouterr()
-    assert "all sessions" in captured.out
-    assert store.list_sessions(path=db) == []
-
-
-def test_delete_all_sessions_command_cancelled(db: Path, monkeypatch) -> None:
-    store.add_task("A", session="s1", path=db)
+def test_delete_all_tasks_command_cancelled(db: Path, monkeypatch) -> None:
+    store.add_task("A", path=db)
 
     monkeypatch.setattr(cli, "_confirm", lambda msg: False)
-    code = cli.main(["--db", str(db), "delete-session", "--all"])
+    code = cli.main(["--db", str(db), "delete", "--all"])
     assert code == 0
-    assert store.list_sessions(path=db) == ["s1"]
+    assert store.list_tasks(path=db)
 
 
-def test_run_with_session_invokes_wrapper(db: Path, monkeypatch) -> None:
-    store.add_task("A", session="s1", path=db)
+def test_run_invokes_wrapper_foreground(db: Path, monkeypatch) -> None:
+    store.add_task("A", path=db)
 
     called = {}
 
-    def fake_run_loop_session(*, session, once, path, retention_hours):
-        called["session"] = session
+    def fake_run_loop(*, once, path, retention_hours):
         called["once"] = once
         called["path"] = path
 
-    monkeypatch.setattr(cli.wrapper, "run_loop_session", fake_run_loop_session)
+    monkeypatch.setattr(cli.wrapper, "run_loop", fake_run_loop)
 
-    code = cli.main(["--db", str(db), "run", "--session", "s1", "--once", "--foreground"])
-    assert code == 0
-    assert called["session"] == "s1"
-    assert called["once"] is True
-    assert called["path"] == db
-
-
-def test_run_all_sessions_invokes_wrapper(db: Path, monkeypatch) -> None:
-    store.add_task("A", session="s1", path=db)
-
-    called = {}
-
-    def fake_run_all_sessions(*, once, path, retention_hours):
-        called["once"] = once
-        called["path"] = path
-
-    monkeypatch.setattr(cli.wrapper, "run_all_sessions", fake_run_all_sessions)
-
-    code = cli.main(["--db", str(db), "run", "--all-sessions", "--once", "--foreground"])
+    code = cli.main(["--db", str(db), "run", "--once", "--foreground"])
     assert code == 0
     assert called["once"] is True
     assert called["path"] == db
 
 
 def test_run_spawns_background_by_default(db: Path, monkeypatch) -> None:
-    store.add_task("A", session="s1", path=db)
+    store.add_task("A", path=db)
 
     spawned = {}
 
@@ -143,26 +111,24 @@ def test_run_spawns_background_by_default(db: Path, monkeypatch) -> None:
 
     monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
 
-    code = cli.main(["--db", str(db), "run", "--session", "s1", "--once"])
+    code = cli.main(["--db", str(db), "run", "--once"])
     assert code == 0
     assert "--foreground" in spawned["cmd"]
     assert "run" in spawned["cmd"]
-    assert "--session" in spawned["cmd"]
-    assert "s1" in spawned["cmd"]
 
-def test_next_with_session(db: Path, capsys) -> None:
-    store.add_task("A", session="s1", path=db)
 
-    code = cli.main(["--db", str(db), "next", "--session", "s1"])
+def test_next(db: Path, capsys) -> None:
+    store.add_task("A", path=db)
+
+    code = cli.main(["--db", str(db), "next"])
     assert code == 0
 
     captured = capsys.readouterr()
     assert "A" in captured.out
-    assert "s1" in captured.out
 
 
-def test_next_with_session_empty(db: Path, capsys) -> None:
-    code = cli.main(["--db", str(db), "next", "--session", "s1"])
+def test_next_empty(db: Path, capsys) -> None:
+    code = cli.main(["--db", str(db), "next"])
     assert code == 1
 
     captured = capsys.readouterr()
