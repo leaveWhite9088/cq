@@ -56,7 +56,7 @@ ID     Status       Policy     Created              Description
 cq run
 ```
 
-`cq run` 现在默认在后台运行，不会锁住控制台。你会看到：
+`cq run` 默认在后台运行，不会锁住控制台。你会看到：
 
 ```text
 Started background runner. Logs: D:\Project2\code-260706-auto-vibecoding\fifo-tui\.cq\run.log
