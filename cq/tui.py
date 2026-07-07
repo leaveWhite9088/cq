@@ -5,8 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
+from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import (
@@ -14,12 +16,12 @@ from textual.widgets import (
     DataTable,
     Footer,
     Header,
-    Input,
     Label,
     RadioButton,
     RadioSet,
     RichLog,
     Static,
+    TextArea,
 )
 
 from cq import store
@@ -36,6 +38,30 @@ def _fmt_desc(desc: str, max_len: int = 50) -> str:
     if len(desc) > max_len:
         return desc[: max_len - 3] + "..."
     return desc
+
+
+class TaskTextArea(TextArea):
+    """Multi-line task description input that submits on Enter."""
+
+    class Submitted(Message, bubble=True):
+        """Posted when the user presses Enter in the text area."""
+
+        def __init__(self, text_area: "TaskTextArea") -> None:
+            self.text = text_area.text
+            super().__init__()
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.Submitted(self))
+            return
+        if event.key == "shift+enter":
+            event.stop()
+            event.prevent_default()
+            self.insert("\n")
+            return
+        await super()._on_key(event)
 
 
 class TaskTable(DataTable):
@@ -56,8 +82,11 @@ class AddTaskScreen(ModalScreen[dict[str, Any] | None]):
     def compose(self) -> ComposeResult:
         with Container(classes="dialog"):
             yield Label("Add task", classes="dialog-title")
-            yield Label("Description:")
-            self.description = Input(placeholder="What should Claude do?")
+            yield Label("Description (Enter to save, Shift+Enter for new line):")
+            self.description = TaskTextArea(
+                placeholder="What should Claude do?",
+                classes="task-input",
+            )
             yield self.description
             self.new_policy = RadioSet(
                 RadioButton("continue conversation", value=True),
@@ -68,17 +97,26 @@ class AddTaskScreen(ModalScreen[dict[str, Any] | None]):
                 yield Button("Add", variant="primary", id="add")
                 yield Button("Cancel", id="cancel")
 
+    def _submit(self) -> None:
+        description = self.description.text.strip()
+        if not description:
+            return
+        context_policy = "new" if self.new_policy.pressed_index == 1 else "continue"
+        self.dismiss(
+            {
+                "description": description,
+                "context_policy": context_policy,
+            }
+        )
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "add":
-            context_policy = "new" if self.new_policy.pressed_index == 1 else "continue"
-            self.dismiss(
-                {
-                    "description": self.description.value,
-                    "context_policy": context_policy,
-                }
-            )
+            self._submit()
         else:
             self.dismiss(None)
+
+    def on_task_text_area_submitted(self, event: TaskTextArea.Submitted) -> None:
+        self._submit()
 
     def action_dismiss_none(self) -> None:
         self.dismiss(None)
@@ -98,10 +136,11 @@ class EditTaskScreen(ModalScreen[dict[str, Any] | None]):
     def compose(self) -> ComposeResult:
         with Container(classes="dialog"):
             yield Label(f"Edit task {self.task_data['id']}", classes="dialog-title")
-            yield Label("Description:")
-            self.description = Input(
-                value=self.task_data["description"],
+            yield Label("Description (Enter to save, Shift+Enter for new line):")
+            self.description = TaskTextArea(
+                text=self.task_data["description"],
                 placeholder="What should Claude do?",
+                classes="task-input",
             )
             yield self.description
             self.new_policy = RadioSet(
@@ -113,18 +152,27 @@ class EditTaskScreen(ModalScreen[dict[str, Any] | None]):
                 yield Button("Save", variant="primary", id="save")
                 yield Button("Cancel", id="cancel")
 
+    def _submit(self) -> None:
+        description = self.description.text.strip()
+        if not description:
+            return
+        context_policy = "new" if self.new_policy.pressed_index == 1 else "continue"
+        self.dismiss(
+            {
+                "id": self.task_data["id"],
+                "description": description,
+                "context_policy": context_policy,
+            }
+        )
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
-            context_policy = "new" if self.new_policy.pressed_index == 1 else "continue"
-            self.dismiss(
-                {
-                    "id": self.task_data["id"],
-                    "description": self.description.value,
-                    "context_policy": context_policy,
-                }
-            )
+            self._submit()
         else:
             self.dismiss(None)
+
+    def on_task_text_area_submitted(self, event: TaskTextArea.Submitted) -> None:
+        self._submit()
 
     def action_dismiss_none(self) -> None:
         self.dismiss(None)
@@ -152,6 +200,11 @@ class HelpScreen(ModalScreen[None]):
   [b]R[/b]          重置卡住/失败任务
   [b]C[/b]          清理旧 completed 任务
   [b]n[/b]          手动领取下一个任务
+
+弹窗内
+  [b]Enter[/b]     保存（添加/编辑任务时）
+  [b]Shift+Enter[/b] 在描述里换行
+  [b]Escape[/b]   取消
 
 单任务
   [b]Enter[/b]      查看选中任务的输出详情
@@ -239,7 +292,7 @@ class CqTuiApp(App[None]):
     Screen { align: center middle; }
 
     .dialog {
-        width: 60;
+        width: 70;
         height: auto;
         border: thick $background 80%;
         padding: 1 2;
@@ -260,6 +313,11 @@ class CqTuiApp(App[None]):
 
     .dialog-buttons Button {
         margin-left: 1;
+    }
+
+    .task-input {
+        height: 8;
+        width: 100%;
     }
 
     .help {
