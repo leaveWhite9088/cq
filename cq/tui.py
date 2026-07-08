@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from rich.markup import escape
+from rich.text import Text
 from textual import events
 from textual.app import App, ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Grid, Horizontal, Vertical
 from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import ModalScreen
@@ -29,6 +31,14 @@ from cq import store
 from cq.wrapper import run_loop
 
 
+_STATUS_STYLES = {
+    "pending": "status-pending",
+    "in_progress": "status-in_progress",
+    "completed": "status-completed",
+    "failed": "status-failed",
+}
+
+
 def _fmt_time(iso: str | None) -> str:
     if not iso:
         return ""
@@ -39,6 +49,35 @@ def _fmt_desc(desc: str, max_len: int = 50) -> str:
     if len(desc) > max_len:
         return desc[: max_len - 3] + "..."
     return desc
+
+
+def _fmt_duration(task: dict[str, Any]) -> str:
+    """Format task duration from started_at to completed_at, or started to now."""
+    started = task.get("started_at")
+    completed = task.get("completed_at")
+    if not started:
+        return ""
+    end = completed or datetime.now(timezone.utc).isoformat()
+    try:
+        started_dt = datetime.fromisoformat(started)
+        end_dt = datetime.fromisoformat(end)
+        delta = end_dt - started_dt
+        total_seconds = int(delta.total_seconds())
+        if total_seconds < 60:
+            return f"{total_seconds}s"
+        minutes, seconds = divmod(total_seconds, 60)
+        if minutes < 60:
+            return f"{minutes}m {seconds}s"
+        hours, minutes = divmod(minutes, 60)
+        return f"{hours}h {minutes}m {seconds}s"
+    except ValueError:
+        return ""
+
+
+def _status_text(status: str) -> Text:
+    """Return a styled Text object for a task status."""
+    style = _STATUS_STYLES.get(status, "")
+    return Text(status, style=style)
 
 
 class TaskTextArea(TextArea):
@@ -69,7 +108,13 @@ class TaskTable(DataTable):
     """Data table showing queued tasks."""
 
     def on_mount(self) -> None:
-        self.add_columns("ID", "Status", "Policy", "Created", "Description")
+        self.add_columns(
+            ("ID", "6"),
+            ("Status", "12"),
+            ("Policy", "10"),
+            ("Created", "20"),
+            "Description",
+        )
         self.cursor_type = "row"
 
 
@@ -186,37 +231,34 @@ class HelpScreen(ModalScreen[None]):
         ("escape,q", "dismiss", "Close"),
     ]
 
-    HELP_TEXT = """
-[b]cq TUI 快捷键[/b]
-
-全局
-  [b]q / Ctrl+C[/b]  退出
-  [b]?[/b]           显示帮助
-  [b]Tab[/b]         切换焦点
-
-任务队列
-  [b]a[/b]          添加任务
-  [b]e[/b]          编辑选中任务
-  [b]r[/b]          运行队列（后台 worker）
-  [b]R[/b]          重置卡住/失败任务
-  [b]C[/b]          清理旧 completed 任务
-  [b]n[/b]          手动领取下一个任务
-
-弹窗内
-  [b]Enter[/b]     保存（添加/编辑任务时）
-  [b]Shift+Enter[/b] 在描述里换行
-  [b]Escape[/b]   取消
-
-单任务
-  [b]Enter[/b]      查看选中任务的输出详情
-  [b]x[/b]          标记选中任务为 completed
-  [b]d[/b]          删除选中任务
-  [b]D[/b]          删除所有任务
-"""
+    HELP_ROWS = [
+        ("q / Ctrl+C", "退出 TUI"),
+        ("?", "显示本帮助"),
+        ("Tab", "切换焦点"),
+        ("a", "添加任务"),
+        ("e", "编辑选中任务"),
+        ("r", "运行队列（后台 worker）"),
+        ("R", "重置卡住/失败任务"),
+        ("C", "清理旧 completed 任务"),
+        ("n", "手动领取下一个任务"),
+        ("Enter", "查看选中任务详情 / 弹窗内保存"),
+        ("Shift+Enter", "在描述输入框内换行"),
+        ("Escape", "取消 / 关闭弹窗"),
+        ("x", "标记选中任务为 completed"),
+        ("d", "删除选中任务"),
+        ("D", "删除所有任务"),
+    ]
 
     def compose(self) -> ComposeResult:
         with Container(classes="dialog help"):
-            yield Static(self.HELP_TEXT, classes="help-text")
+            yield Label("cq TUI 快捷键", classes="dialog-title")
+            table: DataTable = DataTable(id="help-table")
+            table.add_columns("按键", "功能")
+            table.cursor_type = "none"
+            for key, action in self.HELP_ROWS:
+                table.add_row(key, action)
+            yield table
+            yield Static("按 Esc 或 q 关闭", classes="help-text")
             yield Button("Close", variant="primary", id="close")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -259,27 +301,42 @@ class TaskDetailScreen(ModalScreen[None]):
         super().__init__()
         self.task_data = task
 
+    def _detail_row(self, label: str, value: str) -> ComposeResult:
+        yield Static(label, classes="detail-label")
+        yield Static(value, classes="detail-value")
+
     def compose(self) -> ComposeResult:
         with Container(classes="dialog help"):
             title = f"Task {self.task_data['id']} - {self.task_data['status']}"
             yield Label(title, classes="dialog-title")
 
-            lines = [
-                f"Description: {self.task_data['description']}",
-                f"Policy: {self.task_data['context_policy']}",
-                f"Created: {_fmt_time(self.task_data['created_at'])}",
-                "",
-            ]
-            if self.task_data.get("result"):
-                lines.append("[b]Result:[/b]")
-                lines.append(self.task_data["result"])
-            elif self.task_data.get("error"):
-                lines.append("[b]Error:[/b]")
-                lines.append(self.task_data["error"])
-            else:
-                lines.append("No output recorded yet.")
+            with Grid(id="detail-grid"):
+                yield from self._detail_row(
+                    "Description", self.task_data["description"]
+                )
+                yield from self._detail_row(
+                    "Policy", self.task_data["context_policy"]
+                )
+                yield from self._detail_row(
+                    "Created", _fmt_time(self.task_data["created_at"])
+                )
+                yield from self._detail_row(
+                    "Started", _fmt_time(self.task_data.get("started_at"))
+                )
+                yield from self._detail_row(
+                    "Completed", _fmt_time(self.task_data.get("completed_at"))
+                )
+                yield from self._detail_row("Duration", _fmt_duration(self.task_data))
 
-            yield Static("\n".join(lines), classes="help-text")
+            if self.task_data.get("result"):
+                yield Static("Result:", classes="detail-label")
+                yield Static(self.task_data["result"], classes="detail-result")
+            elif self.task_data.get("error"):
+                yield Static("Error:", classes="detail-label")
+                yield Static(self.task_data["error"], classes="detail-error")
+            else:
+                yield Static("No output recorded yet.", classes="help-text")
+
             yield Button("Close", variant="primary", id="close")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -289,71 +346,7 @@ class TaskDetailScreen(ModalScreen[None]):
 class CqTuiApp(App[None]):
     """Main cq TUI application."""
 
-    CSS = """
-    Screen { align: center middle; }
-
-    .dialog {
-        width: 70;
-        height: auto;
-        border: thick $background 80%;
-        padding: 1 2;
-        background: $surface;
-    }
-
-    .dialog-title {
-        text-align: center;
-        text-style: bold;
-        margin-bottom: 1;
-    }
-
-    .dialog-buttons {
-        height: auto;
-        margin-top: 1;
-        align-horizontal: right;
-    }
-
-    .dialog-buttons Button {
-        margin-left: 1;
-    }
-
-    .task-input {
-        height: 8;
-        width: 100%;
-    }
-
-    .help {
-        width: 80;
-        height: auto;
-    }
-
-    .help-text {
-        height: auto;
-        margin-bottom: 1;
-    }
-
-    #main-layout { width: 100%; height: 100%; }
-
-    #task-pane {
-        width: 100%;
-        height: 35%;
-        border: solid $primary;
-    }
-
-    #log-pane {
-        width: 100%;
-        height: 65%;
-        border: solid $primary;
-        padding: 0 1;
-    }
-
-    #log-title {
-        height: 1;
-        text-style: bold;
-    }
-
-    #task-table { height: 100%; }
-    #log { height: 100%; }
-    """
+    CSS_PATH = "tui.css"
 
     BINDINGS = [
         ("q,ctrl+c", "quit", "Quit"),
@@ -379,9 +372,14 @@ class CqTuiApp(App[None]):
         with Vertical(id="main-layout"):
             with Vertical(id="task-pane"):
                 yield TaskTable(id="task-table")
+                yield Static(
+                    "暂无任务。按 'a' 添加任务，'r' 运行队列。",
+                    id="empty-state",
+                )
             with Vertical(id="log-pane"):
                 yield Label("Output / Log", id="log-title")
                 yield RichLog(id="log", highlight=True, wrap=True)
+        yield Horizontal(Static("", id="status-bar-content"), id="status-bar")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -398,26 +396,55 @@ class CqTuiApp(App[None]):
 
     def write_log(self, message: str) -> None:
         log = self.query_one("#log", RichLog)
-        log.write(escape(message))
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log.write(f"[{timestamp}] {escape(message)}")
 
     def _load_tasks(self) -> None:
         table = self.query_one("#task-table", TaskTable)
         table.clear()
+        empty_state = self.query_one("#empty-state", Static)
         try:
             tasks = store.list_tasks(limit=100, path=self.db_path)
         except Exception as exc:
             self.write_log(f"Error loading tasks: {exc}")
             return
 
+        if not tasks:
+            empty_state.add_class("visible")
+        else:
+            empty_state.remove_class("visible")
+
         for task in tasks:
             table.add_row(
                 str(task["id"]),
-                task["status"],
+                _status_text(task["status"]),
                 task["context_policy"],
                 _fmt_time(task["created_at"]),
                 _fmt_desc(task["description"]),
                 key=str(task["id"]),
             )
+
+        self._update_status_bar(tasks)
+
+    def _update_status_bar(self, tasks: list[dict[str, Any]]) -> None:
+        counts: dict[str, int] = {
+            "pending": 0,
+            "in_progress": 0,
+            "completed": 0,
+            "failed": 0,
+        }
+        for task in tasks:
+            status = task.get("status")
+            if status in counts:
+                counts[status] += 1
+
+        status_text = self.query_one("#status-bar-content", Static)
+        status_text.update(
+            f"Pending: {counts['pending']} | "
+            f"In Progress: {counts['in_progress']} | "
+            f"Completed: {counts['completed']} | "
+            f"Failed: {counts['failed']}"
+        )
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
@@ -484,6 +511,7 @@ class CqTuiApp(App[None]):
 
     def action_run_queue(self) -> None:
         self.write_log("Starting queue runner...")
+        self.sub_title = "Running queue..."
 
         def on_task_finished(completed: dict[str, Any]) -> None:
             status = completed["status"]
@@ -515,6 +543,8 @@ class CqTuiApp(App[None]):
                         self.call_from_thread(self.write_log, f"Cleaned up {deleted} old task(s)")
             except Exception as exc:
                 self.call_from_thread(self.write_log, f"Run error: {exc}")
+            finally:
+                self.call_from_thread(setattr, self, "sub_title", "")
 
         self.run_worker(runner, thread=True)
 

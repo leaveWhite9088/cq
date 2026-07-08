@@ -24,3 +24,6 @@ cq = "cq.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cq*"]
+
+[tool.setuptools.package-data]
+cq = ["*.css"]

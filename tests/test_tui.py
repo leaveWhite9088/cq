@@ -83,3 +83,47 @@ async def test_tui_cleanup_queue_deletes_completed_tasks(db: Path) -> None:
         await pilot.pause()
 
         assert store.get_task(task["id"], path=db) is None
+
+
+@pytest.mark.asyncio
+async def test_tui_empty_state_hidden_when_tasks_exist(db: Path) -> None:
+    app = CqTuiApp(db_path=db)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        empty_state = app.query_one("#empty-state")
+        assert "visible" not in empty_state.classes
+
+
+@pytest.mark.asyncio
+async def test_tui_empty_state_visible_when_no_tasks(tmp_path: Path) -> None:
+    db_path = tmp_path / "empty.db"
+    store.init_db(db_path)
+
+    app = CqTuiApp(db_path=db_path)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        empty_state = app.query_one("#empty-state")
+        assert "visible" in empty_state.classes
+
+
+@pytest.mark.asyncio
+async def test_tui_status_bar_shows_counts(db: Path) -> None:
+    app = CqTuiApp(db_path=db)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        status_text = app.query_one("#status-bar-content")
+        rendered = str(status_text.render())
+        assert "Pending: 2" in rendered
+
+
+@pytest.mark.asyncio
+async def test_tui_log_includes_timestamp(db: Path) -> None:
+    app = CqTuiApp(db_path=db)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        log = app.query_one("#log")
+        app.write_log("test message")
+        await pilot.pause()
+        lines = log.lines
+        assert any("test message" in str(line) for line in lines)
+        assert any("[" in str(line) and "]" in str(line) for line in lines)

@@ -1,0 +1,102 @@
+Screen { align: center middle; }
+
+.dialog {
+    width: 60%;
+    min-width: 40;
+    max-width: 80;
+    height: auto;
+    border: thick $background 80%;
+    padding: 1 2;
+    background: $surface;
+}
+
+.dialog-title {
+    text-align: center;
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+.dialog-buttons {
+    height: auto;
+    margin-top: 1;
+    align-horizontal: right;
+}
+
+.dialog-buttons Button {
+    margin-left: 1;
+}
+
+.task-input {
+    height: 8;
+    width: 100%;
+}
+
+.help {
+    width: 70%;
+    min-width: 50;
+    max-width: 90;
+    height: auto;
+}
+
+.help-text {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#main-layout { width: 100%; height: 100%; }
+
+#task-pane {
+    width: 100%;
+    height: 40%;
+    border: solid $primary;
+}
+
+#log-pane {
+    width: 100%;
+    height: 60%;
+    border: solid $primary;
+    padding: 0 1;
+}
+
+#log-title {
+    height: 1;
+    text-style: bold;
+}
+
+#task-table { height: 100%; }
+#log { height: 100%; }
+
+#empty-state {
+    display: none;
+    height: 100%;
+    content-align: center middle;
+    color: $text-muted;
+}
+
+#empty-state.visible {
+    display: block;
+}
+
+#status-bar {
+    height: 1;
+    background: $surface;
+    color: $text;
+    content-align: center middle;
+}
+
+.status-pending { color: $warning; }
+.status-in_progress { color: $primary; text-style: bold; }
+.status-completed { color: $success; }
+.status-failed { color: $error; }
+
+#detail-grid {
+    grid-size: 2;
+    grid-columns: 14 1fr;
+    height: auto;
+    margin-bottom: 1;
+}
+
+.detail-label { text-style: bold; }
+.detail-value { color: $text; }
+.detail-result { color: $success; }
+.detail-error { color: $error; }
