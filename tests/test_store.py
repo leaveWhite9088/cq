@@ -130,14 +130,36 @@ def test_cleanup_completed_tasks_deletes_only_old(db: Path) -> None:
     assert store.get_task(fresh["id"], path=db) is not None
 
 
-def test_cleanup_completed_tasks_zero_disables(db: Path) -> None:
+def test_claim_task(db: Path) -> None:
+    task = store.add_task("target", path=db)
+    other = store.add_task("other", path=db)
+
+    # Can claim the specific pending task by ID.
+    claimed = store.claim_task(task["id"], path=db)
+    assert claimed is not None
+    assert claimed["id"] == task["id"]
+    assert claimed["status"] == "in_progress"
+
+    # Other pending task remains untouched.
+    other_task = store.get_task(other["id"], path=db)
+    assert other_task is not None
+    assert other_task["status"] == "pending"
+
+    # Cannot claim a task that is already in_progress.
+    assert store.claim_task(task["id"], path=db) is None
+
+    # Cannot claim a non-existent task.
+    assert store.claim_task(9999, path=db) is None
+
+
+def test_cleanup_completed_tasks_zero_deletes_all(db: Path) -> None:
     task = store.add_task("done", path=db)
     store.claim_next(path=db)
     store.complete_task(task["id"], status="completed", path=db)
 
     deleted = store.cleanup_completed_tasks(age_hours=0, path=db)
-    assert deleted == 0
-    assert store.get_task(task["id"], path=db) is not None
+    assert deleted == 1
+    assert store.get_task(task["id"], path=db) is None
 
 
 def test_delete_task(db: Path) -> None:

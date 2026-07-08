@@ -388,15 +388,15 @@ class CqTuiApp(App[None]):
         self.title = "cq TUI"
         self._ensure_db()
         self._load_tasks()
-        self._log("Ready. Press 'a' to add a task, 'r' to run queue.")
+        self.write_log("Ready. Press 'a' to add a task, 'r' to run queue.")
 
     def _ensure_db(self) -> None:
         try:
             store.init_db(self.db_path)
         except Exception as exc:
-            self._log(f"Database error: {exc}")
+            self.write_log(f"Database error: {exc}")
 
-    def _log(self, message: str) -> None:
+    def write_log(self, message: str) -> None:
         log = self.query_one("#log", RichLog)
         log.write(escape(message))
 
@@ -406,7 +406,7 @@ class CqTuiApp(App[None]):
         try:
             tasks = store.list_tasks(limit=100, path=self.db_path)
         except Exception as exc:
-            self._log(f"Error loading tasks: {exc}")
+            self.write_log(f"Error loading tasks: {exc}")
             return
 
         for task in tasks:
@@ -432,35 +432,35 @@ class CqTuiApp(App[None]):
                     context_policy=result["context_policy"],
                     path=self.db_path,
                 )
-                self._log(
+                self.write_log(
                     f"Added task {task['id']} ({task['context_policy']}): "
                     f"{task['description']}"
                 )
                 self._load_tasks()
             except Exception as exc:
-                self._log(f"Error adding task: {exc}")
+                self.write_log(f"Error adding task: {exc}")
 
         self.push_screen(AddTaskScreen(), callback=on_result)
 
     async def action_edit_task(self) -> None:
         table = self.query_one("#task-table", TaskTable)
         if table.cursor_row is None:
-            self._log("No task selected.")
+            self.write_log("No task selected.")
             return
 
         row_key = table.get_row_at(table.cursor_row)[0]
         try:
             task = store.get_task(int(row_key), path=self.db_path)
         except Exception as exc:
-            self._log(f"Error: {exc}")
+            self.write_log(f"Error: {exc}")
             return
 
         if task is None:
-            self._log(f"Task {row_key} not found.")
+            self.write_log(f"Task {row_key} not found.")
             return
 
         if task["status"] == "in_progress":
-            self._log(f"Task {row_key} is in progress; cannot edit while running.")
+            self.write_log(f"Task {row_key} is in progress; cannot edit while running.")
             return
 
         def on_result(result: dict[str, Any] | None) -> None:
@@ -472,26 +472,26 @@ class CqTuiApp(App[None]):
                     "context_policy": result["context_policy"],
                 }
                 updated = store.update_task(result["id"], path=self.db_path, **updates)
-                self._log(
+                self.write_log(
                     f"Updated task {updated['id']} ({updated['context_policy']}): "
                     f"{updated['description']}"
                 )
                 self._load_tasks()
             except Exception as exc:
-                self._log(f"Error updating task: {exc}")
+                self.write_log(f"Error updating task: {exc}")
 
         self.push_screen(EditTaskScreen(task), callback=on_result)
 
     def action_run_queue(self) -> None:
-        self._log("Starting queue runner...")
+        self.write_log("Starting queue runner...")
 
         def on_task_finished(completed: dict[str, Any]) -> None:
             status = completed["status"]
-            self._log(f"Task {completed['id']} finished: {status}")
+            self.write_log(f"Task {completed['id']} finished: {status}")
             if completed.get("result"):
-                self._log(completed["result"])
+                self.write_log(completed["result"])
             elif completed.get("error"):
-                self._log(completed["error"])
+                self.write_log(completed["error"])
             self._load_tasks()
 
         def runner() -> None:
@@ -499,10 +499,10 @@ class CqTuiApp(App[None]):
                 while True:
                     task = store.claim_next(path=self.db_path)
                     if task is None:
-                        self.call_from_thread(self._log, "Queue is empty.")
+                        self.call_from_thread(self.write_log, "Queue is empty.")
                         break
                     self.call_from_thread(
-                        self._log,
+                        self.write_log,
                         f"Running task {task['id']}: {task['description']}",
                     )
                     from cq.wrapper import run_task
@@ -512,19 +512,19 @@ class CqTuiApp(App[None]):
 
                     deleted = store.cleanup_completed_tasks(path=self.db_path)
                     if deleted:
-                        self.call_from_thread(self._log, f"Cleaned up {deleted} old task(s)")
+                        self.call_from_thread(self.write_log, f"Cleaned up {deleted} old task(s)")
             except Exception as exc:
-                self.call_from_thread(self._log, f"Run error: {exc}")
+                self.call_from_thread(self.write_log, f"Run error: {exc}")
 
         self.run_worker(runner, thread=True)
 
     def action_reset_queue(self) -> None:
         try:
             reset = store.reset_tasks(path=self.db_path)
-            self._log(f"Reset {len(reset)} task(s) to pending")
+            self.write_log(f"Reset {len(reset)} task(s) to pending")
             self._load_tasks()
         except Exception as exc:
-            self._log(f"Error: {exc}")
+            self.write_log(f"Error: {exc}")
 
     def action_cleanup_queue(self) -> None:
         def on_confirm(confirmed: bool) -> None:
@@ -535,10 +535,10 @@ class CqTuiApp(App[None]):
                     age_hours=0,
                     path=self.db_path,
                 )
-                self._log(f"Cleaned up {deleted} task(s)")
+                self.write_log(f"Cleaned up {deleted} task(s)")
                 self._load_tasks()
             except Exception as exc:
-                self._log(f"Error: {exc}")
+                self.write_log(f"Error: {exc}")
 
         self.push_screen(
             ConfirmScreen("Delete all completed tasks?"),
@@ -549,45 +549,45 @@ class CqTuiApp(App[None]):
         try:
             task = store.claim_next(path=self.db_path)
             if task is None:
-                self._log("No pending tasks.")
+                self.write_log("No pending tasks.")
             else:
-                self._log(f"Claimed task {task['id']}: {task['description']}")
+                self.write_log(f"Claimed task {task['id']}: {task['description']}")
                 self._load_tasks()
         except Exception as exc:
-            self._log(f"Error: {exc}")
+            self.write_log(f"Error: {exc}")
 
     def action_show_detail(self) -> None:
         table = self.query_one("#task-table", TaskTable)
         if table.cursor_row is None:
-            self._log("No task selected.")
+            self.write_log("No task selected.")
             return
         row_key = table.get_row_at(table.cursor_row)[0]
         try:
             task = store.get_task(int(row_key), path=self.db_path)
             if task is None:
-                self._log(f"Task {row_key} not found.")
+                self.write_log(f"Task {row_key} not found.")
                 return
             self.push_screen(TaskDetailScreen(task))
         except Exception as exc:
-            self._log(f"Error: {exc}")
+            self.write_log(f"Error: {exc}")
 
     def action_complete_task(self) -> None:
         table = self.query_one("#task-table", TaskTable)
         if table.cursor_row is None:
-            self._log("No task selected.")
+            self.write_log("No task selected.")
             return
         key = table.get_row_at(table.cursor_row)[0]
         try:
             store.complete_task(int(key), status="completed", path=self.db_path)
-            self._log(f"Marked task {key} as completed")
+            self.write_log(f"Marked task {key} as completed")
             self._load_tasks()
         except Exception as exc:
-            self._log(f"Error: {exc}")
+            self.write_log(f"Error: {exc}")
 
     def action_delete_task(self) -> None:
         table = self.query_one("#task-table", TaskTable)
         if table.cursor_row is None:
-            self._log("No task selected.")
+            self.write_log("No task selected.")
             return
         key = table.get_row_at(table.cursor_row)[0]
 
@@ -596,12 +596,12 @@ class CqTuiApp(App[None]):
                 return
             try:
                 if store.delete_task(int(key), path=self.db_path):
-                    self._log(f"Deleted task {key}")
+                    self.write_log(f"Deleted task {key}")
                     self._load_tasks()
                 else:
-                    self._log(f"Task {key} not found")
+                    self.write_log(f"Task {key} not found")
             except Exception as exc:
-                self._log(f"Error: {exc}")
+                self.write_log(f"Error: {exc}")
 
         self.push_screen(
             ConfirmScreen(f"Delete task {key}?"),
@@ -614,10 +614,10 @@ class CqTuiApp(App[None]):
                 return
             try:
                 deleted = store.delete_all_tasks(path=self.db_path)
-                self._log(f"Deleted all tasks ({deleted})")
+                self.write_log(f"Deleted all tasks ({deleted})")
                 self._load_tasks()
             except Exception as exc:
-                self._log(f"Error: {exc}")
+                self.write_log(f"Error: {exc}")
 
         self.push_screen(
             ConfirmScreen("Delete all tasks?"),

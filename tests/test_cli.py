@@ -150,7 +150,7 @@ def test_run_spawns_background_by_default(db: Path, monkeypatch) -> None:
 
     def fake_popen(cmd, **kwargs):
         spawned["cmd"] = cmd
-        spawned["kwargs"] = kwargs
+        spawned["stdout"] = kwargs.get("stdout")
         return None
 
     monkeypatch.setattr(cli.subprocess, "Popen", fake_popen)
@@ -159,6 +159,44 @@ def test_run_spawns_background_by_default(db: Path, monkeypatch) -> None:
     assert code == 0
     assert "--foreground" in spawned["cmd"]
     assert "run" in spawned["cmd"]
+    # The log file handle should be closed in the parent after Popen.
+    assert spawned["stdout"] is not None
+    assert spawned["stdout"].closed
+
+
+def test_reset_default_resets_in_progress(db: Path, capsys) -> None:
+    store.add_task("stuck", path=db)
+    store.claim_next(path=db)
+
+    code = cli.main(["--db", str(db), "reset"])
+    assert code == 0
+
+    assert store.list_tasks(status="in_progress", path=db) == []
+    assert len(store.list_tasks(status="pending", path=db)) == 1
+
+
+def test_reset_no_in_progress_skips_in_progress(db: Path, capsys) -> None:
+    store.add_task("stuck", path=db)
+    store.claim_next(path=db)
+    store.add_task("waiting", path=db)
+
+    code = cli.main(["--db", str(db), "reset", "--no-in-progress"])
+    assert code == 0
+
+    assert len(store.list_tasks(status="in_progress", path=db)) == 1
+    assert len(store.list_tasks(status="pending", path=db)) == 1
+
+
+def test_reset_failed(db: Path, capsys) -> None:
+    task = store.add_task("broken", path=db)
+    store.claim_next(path=db)
+    store.complete_task(task["id"], status="failed", path=db)
+
+    code = cli.main(["--db", str(db), "reset", "--no-in-progress", "--failed"])
+    assert code == 0
+
+    assert store.list_tasks(status="failed", path=db) == []
+    assert len(store.list_tasks(status="pending", path=db)) == 1
 
 
 def test_next(db: Path, capsys) -> None:

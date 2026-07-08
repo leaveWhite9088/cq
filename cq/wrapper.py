@@ -57,11 +57,19 @@ def run_task(task_id: int, path: Path | str | None = None) -> dict:
     if task is None:
         raise ValueError(f"Task {task_id} not found")
 
-    if task["status"] != "in_progress":
-        # claim_next should already mark it in_progress, but be defensive.
-        task = store.claim_next(path=path)
-        if task is None or task["id"] != task_id:
+    if task["status"] == "in_progress":
+        # Already claimed by the runner loop; run it as-is.
+        pass
+    elif task["status"] == "pending":
+        # Claim this exact task atomically before running.
+        claimed = store.claim_task(task_id, path=path)
+        if claimed is None:
             raise RuntimeError(f"Task {task_id} is not available to run")
+        task = claimed
+    else:
+        raise RuntimeError(
+            f"Task {task_id} has status {task['status']} and cannot be run"
+        )
 
     prompt = _build_prompt(task)
     cmd = _build_claude_command(task, prompt)
@@ -117,6 +125,8 @@ def _resolve_retention_hours(retention_hours: int | None) -> int:
 
 def _run_cleanup(retention_hours: int, path: Path | str | None = None) -> None:
     """Purge old completed tasks and print a message if any were deleted."""
+    if retention_hours <= 0:
+        return
     deleted = store.cleanup_completed_tasks(retention_hours, path=path)
     if deleted:
         print(f"Cleaned up {deleted} old completed task(s).")

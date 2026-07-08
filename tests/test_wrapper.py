@@ -55,3 +55,81 @@ def test_run_loop_claims_pending_tasks(db: Path, monkeypatch) -> None:
     assert len(run_task_calls) == 1
     task = store.get_task(run_task_calls[0], path=db)
     assert task["description"] == "A"
+
+
+def test_run_task_claims_pending_task_by_id(db: Path, monkeypatch) -> None:
+    older = store.add_task("older", path=db)
+    target = store.add_task("target", path=db)
+
+    monkeypatch.setattr(
+        wrapper, "_claude_executable", lambda: "/usr/bin/claude"
+    )
+    monkeypatch.setattr(
+        wrapper.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess_result(0, "ok", ""),
+    )
+
+    completed = wrapper.run_task(target["id"], path=db)
+
+    assert completed["status"] == "completed"
+    assert completed["description"] == "target"
+    # The older task should remain pending, not be claimed by mistake.
+    older_task = store.get_task(older["id"], path=db)
+    assert older_task is not None
+    assert older_task["status"] == "pending"
+
+
+def test_run_task_uses_existing_in_progress_task(db: Path, monkeypatch) -> None:
+    target = store.add_task("target", path=db)
+    claimed = store.claim_next(path=db)
+    assert claimed["id"] == target["id"]
+
+    monkeypatch.setattr(
+        wrapper, "_claude_executable", lambda: "/usr/bin/claude"
+    )
+    monkeypatch.setattr(
+        wrapper.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess_result(0, "ok", ""),
+    )
+
+    completed = wrapper.run_task(target["id"], path=db)
+
+    assert completed["status"] == "completed"
+    assert completed["description"] == "target"
+
+
+def test_run_task_raises_for_completed_task(db: Path, monkeypatch) -> None:
+    target = store.add_task("target", path=db)
+    store.claim_next(path=db)
+    store.complete_task(target["id"], status="completed", path=db)
+
+    monkeypatch.setattr(
+        wrapper, "_claude_executable", lambda: "/usr/bin/claude"
+    )
+
+    with pytest.raises(RuntimeError, match="cannot be run"):
+        wrapper.run_task(target["id"], path=db)
+
+
+def test_run_cleanup_disabled_for_zero_retention(db: Path, monkeypatch) -> None:
+    called = []
+    monkeypatch.setattr(
+        store, "cleanup_completed_tasks", lambda *args, **kwargs: called.append(True) or 0
+    )
+
+    wrapper._run_cleanup(0, path=db)
+
+    assert not called
+
+
+def subprocess_result(returncode: int, stdout: str, stderr: str):
+    """Build a minimal subprocess.CompletedProcess-like object for monkeypatching."""
+    result = wrapper.subprocess.CompletedProcess(
+        args=[],
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+    return result

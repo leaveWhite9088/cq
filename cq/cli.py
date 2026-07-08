@@ -167,19 +167,21 @@ def _spawn_background_runner(args: argparse.Namespace) -> None:
     if args.retention_hours is not None:
         cmd.extend(["--retention-hours", str(args.retention_hours)])
 
-    popen_kwargs: dict[str, Any] = {
-        "stdout": open(log_path, "a", encoding="utf-8"),
-        "stderr": subprocess.STDOUT,
-        "stdin": subprocess.DEVNULL,
-    }
-    if sys.platform == "win32":
-        popen_kwargs["creationflags"] = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-        )
-    else:
-        popen_kwargs["start_new_session"] = True
+    with open(log_path, "a", encoding="utf-8") as log_file:
+        popen_kwargs: dict[str, Any] = {
+            "stdout": log_file,
+            "stderr": subprocess.STDOUT,
+            "stdin": subprocess.DEVNULL,
+        }
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = (
+                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+            )
+        else:
+            popen_kwargs["start_new_session"] = True
 
-    subprocess.Popen(cmd, **popen_kwargs)
+        subprocess.Popen(cmd, **popen_kwargs)
+
     print(f"Started background runner. Logs: {log_path}")
 
 
@@ -326,7 +328,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p_reset = sub.add_parser("reset", help="Reset in_progress/failed tasks to pending")
     p_reset.add_argument(
         "--in-progress",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
         help="Reset in_progress tasks (default: true)",
     )

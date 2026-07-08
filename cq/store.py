@@ -205,6 +205,37 @@ def claim_next(path: Path | str | None = None) -> dict[str, Any] | None:
         conn.close()
 
 
+def claim_task(
+    task_id: int,
+    path: Path | str | None = None,
+) -> dict[str, Any] | None:
+    """Atomically claim a specific pending task by ID.
+
+    Returns the task if it was pending and is now in_progress, otherwise None.
+    """
+    conn = _connect(path)
+    try:
+        conn.execute("BEGIN IMMEDIATE;")
+        try:
+            cursor = conn.execute(
+                """
+                UPDATE tasks
+                SET status = 'in_progress', started_at = ?
+                WHERE id = ? AND status = 'pending'
+                RETURNING *;
+                """,
+                (_now(), task_id),
+            )
+            row = cursor.fetchone()
+            conn.commit()
+            return _row_to_dict(row) if row else None
+        except Exception:
+            conn.rollback()
+            raise
+    finally:
+        conn.close()
+
+
 def complete_task(
     task_id: int,
     status: str = "completed",
@@ -242,19 +273,21 @@ def cleanup_completed_tasks(
 ) -> int:
     """Delete completed tasks older than `age_hours` hours.
 
-    Returns the number of deleted rows. Passing ``age_hours <= 0`` disables
-    cleanup and returns 0.
+    Returns the number of deleted rows. Passing ``age_hours <= 0`` deletes
+    all completed tasks.
     """
-    if age_hours <= 0:
-        return 0
-
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=age_hours)).isoformat()
     conn = _connect(path)
     try:
-        cursor = conn.execute(
-            "DELETE FROM tasks WHERE status = 'completed' AND completed_at < ?;",
-            (cutoff,),
-        )
+        if age_hours <= 0:
+            cursor = conn.execute("DELETE FROM tasks WHERE status = 'completed';")
+        else:
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(hours=age_hours)
+            ).isoformat()
+            cursor = conn.execute(
+                "DELETE FROM tasks WHERE status = 'completed' AND completed_at < ?;",
+                (cutoff,),
+            )
         conn.commit()
         return cursor.rowcount
     finally:
