@@ -66,7 +66,7 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-### 嵌入到另一个项目里
+### 方式三：嵌入到另一个项目里
 
 把 `cq` 整个目录复制（或 git submodule）到另一个项目的根目录：
 
