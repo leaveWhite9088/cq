@@ -46,9 +46,9 @@
 ### 方式一：使用 install.py（推荐）
 
 ```bash
-git clone https://github.com/leaveWhite9088/fifo-tui.git
+git clone https://github.com/leaveWhite9088/cq.git
 # 或者把它放进另一个项目的根目录下
-cd fifo-tui
+cd cq
 
 python install.py
 # 开发依赖（测试工具）
@@ -60,7 +60,7 @@ python install.py --dev
 ### 方式二：直接用 pip
 
 ```bash
-cd fifo-tui
+cd cq
 pip install -e .
 # 开发依赖
 pip install -e ".[dev]"
@@ -68,11 +68,11 @@ pip install -e ".[dev]"
 
 ### 嵌入到另一个项目里
 
-把 `fifo-tui` 整个目录复制（或 git submodule）到另一个项目的根目录：
+把 `cq` 整个目录复制（或 git submodule）到另一个项目的根目录：
 
 ```text
 your-project/
-├── fifo-tui/
+├── cq/
 │   ├── install.py
 │   ├── cq/
 │   └── ...
@@ -82,7 +82,7 @@ your-project/
 然后进入 `your-project` 的 Python 环境，执行一键安装：
 
 ```bash
-python fifo-tui/install.py
+python cq/install.py
 ```
 
 安装完成后，在该环境里任意位置都能使用：
@@ -120,7 +120,7 @@ cq tui
    输出示例：
 
    ```text
-   Started background runner. Logs: D:\Project2\code-260706-auto-vibecoding\fifo-tui\.cq\run.log
+   Started background runner. Logs: D:\Project2\code-260706-auto-vibecoding\cq\.cq\run.log
    ```
 
 4. **继续添加任务**：

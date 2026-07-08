@@ -16,7 +16,7 @@
 ### 1. 准备
 
 ```bash
-cd D:\Project2\code-260706-auto-vibecoding\fifo-tui
+cd D:\Project2\code-260706-auto-vibecoding\cq
 .venv\Scripts\activate
 ```
 
@@ -59,7 +59,7 @@ cq run
 `cq run` 默认在后台运行，不会锁住控制台。你会看到：
 
 ```text
-Started background runner. Logs: D:\Project2\code-260706-auto-vibecoding\fifo-tui\.cq\run.log
+Started background runner. Logs: D:\Project2\code-260706-auto-vibecoding\cq\.cq\run.log
 ```
 
 然后你可以继续添加更多任务：
@@ -269,13 +269,13 @@ cq cleanup
 
 假设你正在开发 `my-project`，想直接用 `cq` 管理 Claude 任务：
 
-### 1. 把 `fifo-tui` 放到项目根目录
+### 1. 把 `cq` 放到项目根目录
 
 可以直接复制目录，也可以用 git submodule：
 
 ```text
 my-project/
-├── fifo-tui/
+├── cq/
 │   ├── install.py
 │   ├── cq/
 │   └── ...
@@ -288,10 +288,10 @@ my-project/
 进入 `my-project` 的 Conda / venv / 系统 Python，执行：
 
 ```bash
-python fifo-tui/install.py
+python cq/install.py
 ```
 
-`install.py` 会调用 `pip install -e ./fifo-tui`，把 `cq` 装到当前环境里，**不会新建虚拟环境**。
+`install.py` 会调用 `pip install -e ./cq`，把 `cq` 装到当前环境里，**不会新建虚拟环境**。
 
 ### 3. 在 `my-project` 里使用
 
@@ -302,7 +302,7 @@ cq add "重构 utils.py"
 cq tui
 ```
 
-队列数据库默认创建在执行命令的目录下（即 `my-project/.cq/queue.db`），和 `fifo-tui` 目录本身互不干扰。
+队列数据库默认创建在执行命令的目录下（即 `my-project/.cq/queue.db`），和 `cq` 目录本身互不干扰。
 
 ---
 
