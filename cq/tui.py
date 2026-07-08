@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from rich.markup import escape
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical
@@ -334,13 +335,13 @@ class CqTuiApp(App[None]):
 
     #task-pane {
         width: 100%;
-        height: 60%;
+        height: 35%;
         border: solid $primary;
     }
 
     #log-pane {
         width: 100%;
-        height: 40%;
+        height: 65%;
         border: solid $primary;
         padding: 0 1;
     }
@@ -397,7 +398,7 @@ class CqTuiApp(App[None]):
 
     def _log(self, message: str) -> None:
         log = self.query_one("#log", RichLog)
-        log.write(message)
+        log.write(escape(message))
 
     def _load_tasks(self) -> None:
         table = self.query_one("#task-table", TaskTable)
@@ -486,12 +487,11 @@ class CqTuiApp(App[None]):
 
         def on_task_finished(completed: dict[str, Any]) -> None:
             status = completed["status"]
-            summary = ""
+            self._log(f"Task {completed['id']} finished: {status}")
             if completed.get("result"):
-                summary = completed["result"][:200].replace("\n", " ")
+                self._log(completed["result"])
             elif completed.get("error"):
-                summary = completed["error"][:200].replace("\n", " ")
-            self._log(f"Task {completed['id']} finished: {status} - {summary}")
+                self._log(completed["error"])
             self._load_tasks()
 
         def runner() -> None:

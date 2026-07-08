@@ -84,14 +84,14 @@ def run_task(task_id: int, path: Path | str | None = None) -> dict:
             completed = store.complete_task(
                 task_id,
                 status="completed",
-                result=output[:4000],
+                result=output,
                 path=path,
             )
         else:
             completed = store.complete_task(
                 task_id,
                 status="failed",
-                error=output[:4000],
+                error=output,
                 path=path,
             )
         return completed
