@@ -4,6 +4,9 @@
 # Task queue state
 .cq/
 
+# Claude Code local/project settings
+.claude/
+
 # Python build artifacts
 *.egg-info/
 __pycache__/
