@@ -15,12 +15,10 @@ from cq import wrapper
 
 
 def _db_path(args: argparse.Namespace) -> Path | None:
+    """显式数据库路径：--db 参数 > CQ_DB_PATH 环境变量。"""
     if args and getattr(args, "db", None):
         return Path(args.db)
-    env = os.environ.get("CQ_DB_PATH")
-    if env:
-        return Path(env)
-    return None
+    return store._env_db_path()
 
 
 def _retention_hours(args_value: int | None) -> int:
@@ -151,7 +149,7 @@ def _spawn_background_runner(args: argparse.Namespace) -> None:
     Output is appended to ``.cq/run.log`` next to the database.
     """
     db_path = _db_path(args)
-    log_path = Path(store.default_db_path()).parent / "run.log"
+    log_path = store.default_db_path().parent / "run.log"
     if db_path:
         log_path = Path(db_path).parent / "run.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -216,8 +214,6 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
 
 def cmd_tui(args: argparse.Namespace) -> int:
     path = _db_path(args)
-    # 用户可通过 --db-root 显式指定数据库根目录，优先级高于 cwd
-    db_root = getattr(args, "db_root", None)
     try:
         from cq.tui import CqTuiApp
     except ImportError as exc:
@@ -228,10 +224,10 @@ def cmd_tui(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # 固定数据库根目录：显式 --db-root > 启动时 cwd，
+    # 固定数据库根目录：显式 --db > 启动时 cwd，
     # 避免 TUI 长驻期间 cwd 漂移导致数据库位置改变。
     if path is None:
-        store.set_root_dir(db_root if db_root else os.getcwd())
+        store.set_root_dir(os.getcwd())
     try:
         app = CqTuiApp(db_path=path)
         return app.run()
@@ -371,12 +367,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Hours to keep completed tasks (default: 24, from CQ_COMPLETED_RETENTION_HOURS)",
     )
 
-    p_tui = sub.add_parser("tui", help="Launch the interactive TUI")
-    p_tui.add_argument(
-        "--db-root",
-        default=None,
-        help="数据库根目录（默认：启动 TUI 时的当前工作目录）。",
-    )
+    sub.add_parser("tui", help="Launch the interactive TUI")
 
     p_delete = sub.add_parser("delete", help="Delete a task or all tasks")
     p_delete.add_argument("id", type=int, nargs="?", help="Task ID to delete")

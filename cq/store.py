@@ -30,14 +30,43 @@ def set_root_dir(path: str | None) -> None:
     _root_dir = path
 
 
-def default_db_path() -> Path:
-    """Return the default queue database path.
+def _env_db_path() -> Path | None:
+    """Return the database path from the ``CQ_DB_PATH`` environment variable.
 
-    If a root directory has been set via :func:`set_root_dir`, it is used;
-    otherwise the current working directory is used.
+    Returns ``None`` if the variable is empty / unset. Otherwise it is treated
+    as an absolute path to the database file — exactly like the ``--db`` CLI
+    flag.
     """
+    env = os.environ.get("CQ_DB_PATH")
+    if not env:
+        return None
+    return Path(env)
+
+
+def _resolve_default_db_path() -> Path:
+    """Pick the database location when the caller did not pass an explicit path.
+
+    Priority (highest → lowest):
+    1. ``CQ_DB_PATH`` env var (full file path)
+    2. ``set_root_dir(...)`` override (used by the TUI) → ``<root>/.cq/queue.db``
+    3. ``Path.cwd()/.cq/queue.db`` (last resort)
+    """
+    env_path = _env_db_path()
+    if env_path is not None:
+        return env_path
+
     base = Path(_root_dir) if _root_dir is not None else Path.cwd()
     return base / DEFAULT_DB_DIR / DEFAULT_DB_NAME
+
+
+def default_db_path() -> Path:
+    """Resolve the default queue database path.
+
+    Delegates to :func:`_resolve_default_db_path`, which checks ``CQ_DB_PATH``
+    and the in-process ``set_root_dir`` override before falling back to
+    ``Path.cwd()/.cq/queue.db``.
+    """
+    return _resolve_default_db_path()
 
 
 def _now() -> str:
@@ -89,11 +118,16 @@ def init_db(path: Path | str | None = None) -> Path:
     """Create the queue database and schema if they do not exist.
 
     Returns the resolved database path.
+
+    Resolution when ``path`` is ``None``:
+    1. ``CQ_DB_PATH`` env var (full database file path), or
+    2. the in-process ``set_root_dir`` override, or
+    3. ``Path.cwd()/.cq/queue.db``.
     """
-    if path is None:
-        db_path = default_db_path()
-    else:
+    if path is not None:
         db_path = Path(path)
+    else:
+        db_path = _resolve_default_db_path()
 
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -128,10 +162,10 @@ def init_db(path: Path | str | None = None) -> Path:
 
 
 def _connect(path: Path | str | None = None) -> sqlite3.Connection:
-    if path is None:
-        db_path = default_db_path()
-    else:
+    if path is not None:
         db_path = Path(path)
+    else:
+        db_path = _resolve_default_db_path()
 
     if not db_path.exists():
         raise FileNotFoundError(
