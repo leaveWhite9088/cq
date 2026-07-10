@@ -98,6 +98,42 @@ async def test_tui_status_bar_shows_counts(db: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_tui_status_bar_shows_db_path(db: Path) -> None:
+    """status bar 应显示当前数据库路径的父目录。"""
+    app = CqTuiApp(db_path=db)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        status_text = app.query_one("#status-bar-content")
+        rendered = str(status_text.render())
+        assert "DB:" in rendered
+        assert str(db.parent) in rendered
+
+
+@pytest.mark.asyncio
+async def test_tui_retry_failed_resets_only_failed(db: Path, tmp_path: Path) -> None:
+    """F 键应只重置 failed 任务，不影响 in_progress 任务。"""
+    db_path = tmp_path / "queue.db"
+    store.init_db(db_path)
+    store.add_task("task a", path=db_path)
+    store.add_task("task b", path=db_path)
+
+    a = store.claim_next(path=db_path)  # in_progress
+    b = store.claim_next(path=db_path)  # -> in_progress -> failed
+    store.complete_task(b["id"], status="failed", path=db_path)
+
+    app = CqTuiApp(db_path=db_path)
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        app.action_retry_failed()
+        await pilot.pause()
+
+        a_after = store.get_task(a["id"], path=db_path)
+        b_after = store.get_task(b["id"], path=db_path)
+        assert a_after["status"] == "in_progress"  # 不受影响
+        assert b_after["status"] == "pending"  # 已被重置
+
+
+@pytest.mark.asyncio
 async def test_tui_log_includes_timestamp(db: Path) -> None:
     app = CqTuiApp(db_path=db)
     async with app.run_test() as pilot:

@@ -109,6 +109,47 @@ def test_reset_tasks(db: Path) -> None:
     assert all(t["status"] == "pending" for t in reset)
 
 
+def test_reset_tasks_default_includes_failed(db: Path) -> None:
+    """默认行为：store.reset_tasks() 应该同时重置 failed 任务（TUI 用户体验所需）。"""
+    store.add_task("stuck", path=db)
+    store.add_task("broken", path=db)
+    stuck = store.claim_next(path=db)
+    broken = store.claim_next(path=db)
+    store.complete_task(broken["id"], status="failed", path=db)
+
+    reset = store.reset_tasks(path=db)  # 使用默认值
+    ids = {t["id"] for t in reset}
+    assert stuck["id"] in ids
+    assert broken["id"] in ids
+    assert all(t["status"] == "pending" for t in reset)
+
+
+def test_reset_failed_only(db: Path) -> None:
+    """include_in_progress=False、include_failed=True 时只重置 failed 任务（TUI 的 F 键）。"""
+    store.add_task("ok", path=db)
+    store.add_task("broken", path=db)
+    store.add_task("todo", path=db)
+    store.claim_next(path=db)  # ok 进入 in_progress
+    broken = store.claim_next(path=db)  # broken 进入 in_progress
+    store.complete_task(broken["id"], status="failed", path=db)
+    # 此时：ok=in_progress, broken=failed, todo=pending
+
+    reset = store.reset_tasks(
+        include_in_progress=False,
+        include_failed=True,
+        path=db,
+    )
+    assert len(reset) == 1
+    assert reset[0]["id"] == broken["id"]
+    assert reset[0]["status"] == "pending"
+
+    ok_task = store.get_task(broken["id"], path=db)  # noqa: F841 — 占位检查 broken 已 reset
+    # in_progress 的任务应完好（不受影响）
+    all_tasks = {t["id"]: t for t in store.list_tasks(path=db)}
+    assert all_tasks[broken["id"]]["status"] == "pending"
+    # todo（已经是 pending）不会被影响到
+
+
 def test_cleanup_completed_tasks_deletes_only_old(db: Path) -> None:
     old = store.add_task("old", path=db)
     fresh = store.add_task("fresh", path=db)

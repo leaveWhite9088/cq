@@ -350,10 +350,14 @@ def cleanup_completed_tasks(
 
 def reset_tasks(
     include_in_progress: bool = True,
-    include_failed: bool = False,
+    include_failed: bool = True,
     path: Path | str | None = None,
 ) -> list[dict[str, Any]]:
-    """Reset in_progress (and optionally failed) tasks back to pending."""
+    """Reset in_progress (and optionally failed) tasks back to pending.
+
+    Defaults to resetting both ``in_progress`` and ``failed`` so a user can
+    re-run stale or failed jobs with one operation.
+    """
     statuses = []
     if include_in_progress:
         statuses.append("in_progress")

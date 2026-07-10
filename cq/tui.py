@@ -239,6 +239,7 @@ class HelpScreen(ModalScreen[None]):
         ("e", "编辑选中任务"),
         ("r", "运行队列（后台 worker）"),
         ("R", "重置卡住/失败任务"),
+        ("F", "重试所有 failed 任务（重置为 pending）"),
         ("n", "手动领取下一个任务"),
         ("Enter", "查看选中任务详情 / 弹窗内保存"),
         ("Shift+Enter", "在描述输入框内换行"),
@@ -353,6 +354,7 @@ class CqTuiApp(App[None]):
         ("e", "edit_task", "Edit task"),
         ("r", "run_queue", "Run queue"),
         ("R", "reset_queue", "Reset queue"),
+        ("F", "retry_failed", "Retry failed"),
         ("n", "next_task", "Next task"),
         ("enter", "show_detail", "Show detail"),
         ("d", "delete_task", "Delete task"),
@@ -556,6 +558,20 @@ class CqTuiApp(App[None]):
         try:
             reset = store.reset_tasks(path=self.db_path)
             self.write_log(f"Reset {len(reset)} task(s) to pending")
+            self._load_tasks()
+        except Exception as exc:
+            self.write_log(f"Error: {exc}")
+
+    def action_retry_failed(self) -> None:
+        """Reset ONLY failed tasks back to pending (leaving in_progress alone)."""
+        try:
+            from cq.store import reset_tasks
+            reset = reset_tasks(
+                include_in_progress=False,
+                include_failed=True,
+                path=self.db_path,
+            )
+            self.write_log(f"Retrying {len(reset)} failed task(s)")
             self._load_tasks()
         except Exception as exc:
             self.write_log(f"Error: {exc}")

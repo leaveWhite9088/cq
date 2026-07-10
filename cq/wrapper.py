@@ -14,8 +14,10 @@ DEFAULT_CLAUDE_ARGS = [
     "--allowedTools",
     "Bash,Read,Edit,Write,Glob,Grep",
     "--dangerously-skip-permissions",
-    "--bare",
 ]
+
+# 单个任务执行超时（秒）。Claude Code 头模式跑复杂任务可能需要较长时间。
+TASK_TIMEOUT = 1800  # 30 分钟
 
 
 def _claude_executable() -> str:
@@ -81,7 +83,7 @@ def run_task(task_id: int, path: Path | str | None = None) -> dict:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=600,
+            timeout=TASK_TIMEOUT,
             check=False,
         )
         output = result.stdout or ""
@@ -103,11 +105,13 @@ def run_task(task_id: int, path: Path | str | None = None) -> dict:
                 path=path,
             )
         return completed
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         return store.complete_task(
             task_id,
             status="failed",
-            error=f"Timeout after {exc.timeout} seconds",
+            error=f"Timeout after {TASK_TIMEOUT} seconds. "
+                  f"Try breaking this task into smaller steps, "
+                  f"or use 'x' to manually mark complete if done.",
             path=path,
         )
 
