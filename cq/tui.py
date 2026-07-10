@@ -438,8 +438,16 @@ class CqTuiApp(App[None]):
             if status in counts:
                 counts[status] += 1
 
+        # 显示数据库实际位置，让用户一眼看到"根目录"落在哪里
+        try:
+            db_loc = store.init_db(self.db_path)
+            db_dir = str(db_loc.parent)
+        except Exception:
+            db_dir = "?"
+
         status_text = self.query_one("#status-bar-content", Static)
         status_text.update(
+            f"DB: {db_dir} | "
             f"Pending: {counts['pending']} | "
             f"In Progress: {counts['in_progress']} | "
             f"Completed: {counts['completed']} | "

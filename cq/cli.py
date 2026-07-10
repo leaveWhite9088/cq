@@ -216,6 +216,8 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
 
 def cmd_tui(args: argparse.Namespace) -> int:
     path = _db_path(args)
+    # 用户可通过 --db-root 显式指定数据库根目录，优先级高于 cwd
+    db_root = getattr(args, "db_root", None)
     try:
         from cq.tui import CqTuiApp
     except ImportError as exc:
@@ -226,10 +228,10 @@ def cmd_tui(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Fix the database root to the directory the user launched the TUI from,
-    # so it doesn't drift if the working directory changes while the TUI runs.
+    # 固定数据库根目录：显式 --db-root > 启动时 cwd，
+    # 避免 TUI 长驻期间 cwd 漂移导致数据库位置改变。
     if path is None:
-        store.set_root_dir(os.getcwd())
+        store.set_root_dir(db_root if db_root else os.getcwd())
     try:
         app = CqTuiApp(db_path=path)
         return app.run()
@@ -369,7 +371,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Hours to keep completed tasks (default: 24, from CQ_COMPLETED_RETENTION_HOURS)",
     )
 
-    sub.add_parser("tui", help="Launch the interactive TUI")
+    p_tui = sub.add_parser("tui", help="Launch the interactive TUI")
+    p_tui.add_argument(
+        "--db-root",
+        default=None,
+        help="数据库根目录（默认：启动 TUI 时的当前工作目录）。",
+    )
 
     p_delete = sub.add_parser("delete", help="Delete a task or all tasks")
     p_delete.add_argument("id", type=int, nargs="?", help="Task ID to delete")

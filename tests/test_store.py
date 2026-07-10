@@ -1,5 +1,6 @@
 """Tests for cq.store."""
 
+import os
 import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -251,6 +252,26 @@ def test_set_root_dir_none_clears_override(tmp_path: Path, monkeypatch) -> None:
     store.set_root_dir(None)
     monkeypatch.chdir(tmp_path)
     assert store.default_db_path() == tmp_path / ".cq" / "queue.db"
+
+
+def test_tui_db_root_arg_overrides_cwd(tmp_path: Path, monkeypatch) -> None:
+    """``cq tui --db-root X`` 应该让数据库落在 X，不管 cwd 在哪。"""
+    import argparse
+    from cq import cli
+
+    cli.store.set_root_dir(None)
+    monkeypatch.chdir(tempfile.gettempdir())
+
+    args = cli._build_parser().parse_args(["tui", "--db-root", str(tmp_path)])
+    # 模拟 cmd_tui 中设置 root_dir 的逻辑（不真正启动 TUI）
+    path = cli._db_path(args)
+    assert path is None
+    db_root = getattr(args, "db_root", None)
+    cli.store.set_root_dir(db_root if db_root else os.getcwd())
+    try:
+        assert cli.store.default_db_path() == tmp_path / ".cq" / "queue.db"
+    finally:
+        cli.store.set_root_dir(None)
 
 
 def test_update_task_resets_completed_task(db: Path) -> None:
