@@ -239,12 +239,10 @@ class HelpScreen(ModalScreen[None]):
         ("e", "编辑选中任务"),
         ("r", "运行队列（后台 worker）"),
         ("R", "重置卡住/失败任务"),
-        ("C", "清理旧 completed 任务"),
         ("n", "手动领取下一个任务"),
         ("Enter", "查看选中任务详情 / 弹窗内保存"),
         ("Shift+Enter", "在描述输入框内换行"),
         ("Escape", "取消 / 关闭弹窗"),
-        ("x", "标记选中任务为 completed"),
         ("d", "删除选中任务"),
         ("D", "删除所有任务"),
     ]
@@ -355,10 +353,8 @@ class CqTuiApp(App[None]):
         ("e", "edit_task", "Edit task"),
         ("r", "run_queue", "Run queue"),
         ("R", "reset_queue", "Reset queue"),
-        ("c", "cleanup_queue", "Cleanup"),
         ("n", "next_task", "Next task"),
         ("enter", "show_detail", "Show detail"),
-        ("x", "complete_task", "Complete task"),
         ("d", "delete_task", "Delete task"),
         ("D", "delete_all_tasks", "Delete all"),
     ]
@@ -564,25 +560,6 @@ class CqTuiApp(App[None]):
         except Exception as exc:
             self.write_log(f"Error: {exc}")
 
-    def action_cleanup_queue(self) -> None:
-        def on_confirm(confirmed: bool) -> None:
-            if not confirmed:
-                return
-            try:
-                deleted = store.cleanup_completed_tasks(
-                    age_hours=0,
-                    path=self.db_path,
-                )
-                self.write_log(f"Cleaned up {deleted} task(s)")
-                self._load_tasks()
-            except Exception as exc:
-                self.write_log(f"Error: {exc}")
-
-        self.push_screen(
-            ConfirmScreen("Delete all completed tasks?"),
-            callback=on_confirm,
-        )
-
     def action_next_task(self) -> None:
         try:
             task = store.claim_next(path=self.db_path)
@@ -606,19 +583,6 @@ class CqTuiApp(App[None]):
                 self.write_log(f"Task {row_key} not found.")
                 return
             self.push_screen(TaskDetailScreen(task))
-        except Exception as exc:
-            self.write_log(f"Error: {exc}")
-
-    def action_complete_task(self) -> None:
-        table = self.query_one("#task-table", TaskTable)
-        if table.cursor_row is None:
-            self.write_log("No task selected.")
-            return
-        key = table.get_row_at(table.cursor_row)[0]
-        try:
-            store.complete_task(int(key), status="completed", path=self.db_path)
-            self.write_log(f"Marked task {key} as completed")
-            self._load_tasks()
         except Exception as exc:
             self.write_log(f"Error: {exc}")
 
