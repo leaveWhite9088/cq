@@ -14,10 +14,30 @@ DEFAULT_DB_NAME = "queue.db"
 VALID_STATUSES = {"pending", "in_progress", "completed", "failed"}
 VALID_POLICIES = {"continue", "new"}
 
+# Override for the root directory used by ``default_db_path()``. When set, it
+# takes precedence over ``Path.cwd()`` so that a long-running process (like the
+# TUI) keeps using the directory it was started from, even if the working
+# directory changes later.
+_root_dir: str | None = None
+
+
+def set_root_dir(path: str | None) -> None:
+    """Set the root directory used by ``default_db_path()``.
+
+    Pass ``None`` to clear the override and fall back to ``Path.cwd()``.
+    """
+    global _root_dir
+    _root_dir = path
+
 
 def default_db_path() -> Path:
-    """Return the default queue database path relative to the current working directory."""
-    return Path.cwd() / DEFAULT_DB_DIR / DEFAULT_DB_NAME
+    """Return the default queue database path.
+
+    If a root directory has been set via :func:`set_root_dir`, it is used;
+    otherwise the current working directory is used.
+    """
+    base = Path(_root_dir) if _root_dir is not None else Path.cwd()
+    return base / DEFAULT_DB_DIR / DEFAULT_DB_NAME
 
 
 def _now() -> str:

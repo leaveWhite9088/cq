@@ -228,6 +228,31 @@ def test_update_task_description_and_policy(db: Path) -> None:
     assert updated["status"] == "pending"
 
 
+def test_default_db_path_uses_cwd_by_default(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    store.set_root_dir(None)
+    assert store.default_db_path() == tmp_path / ".cq" / "queue.db"
+
+
+def test_default_db_path_uses_root_dir_override(tmp_path: Path, monkeypatch) -> None:
+    # Simulate starting the TUI in tmp_path while cwd moves elsewhere.
+    monkeypatch.chdir(tmp_path)
+    store.set_root_dir(str(tmp_path))
+    monkeypatch.chdir(tempfile.gettempdir())
+    assert store.default_db_path() == tmp_path / ".cq" / "queue.db"
+
+
+def test_set_root_dir_none_clears_override(tmp_path: Path, monkeypatch) -> None:
+    other = tmp_path / "other"
+    other.mkdir()
+    store.set_root_dir(str(other))
+    assert store.default_db_path() == other / ".cq" / "queue.db"
+
+    store.set_root_dir(None)
+    monkeypatch.chdir(tmp_path)
+    assert store.default_db_path() == tmp_path / ".cq" / "queue.db"
+
+
 def test_update_task_resets_completed_task(db: Path) -> None:
     task = store.add_task("do thing", path=db)
     store.claim_next(path=db)

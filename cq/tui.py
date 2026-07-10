@@ -355,7 +355,7 @@ class CqTuiApp(App[None]):
         ("e", "edit_task", "Edit task"),
         ("r", "run_queue", "Run queue"),
         ("R", "reset_queue", "Reset queue"),
-        ("C", "cleanup_queue", "Cleanup"),
+        ("c", "cleanup_queue", "Cleanup"),
         ("n", "next_task", "Next task"),
         ("enter", "show_detail", "Show detail"),
         ("x", "complete_task", "Complete task"),

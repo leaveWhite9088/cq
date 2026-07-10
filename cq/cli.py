@@ -226,8 +226,16 @@ def cmd_tui(args: argparse.Namespace) -> int:
         )
         return 1
 
-    app = CqTuiApp(db_path=path)
-    return app.run()
+    # Fix the database root to the directory the user launched the TUI from,
+    # so it doesn't drift if the working directory changes while the TUI runs.
+    if path is None:
+        store.set_root_dir(os.getcwd())
+    try:
+        app = CqTuiApp(db_path=path)
+        return app.run()
+    finally:
+        if path is None:
+            store.set_root_dir(None)
 
 
 def cmd_delete(args: argparse.Namespace) -> int:
